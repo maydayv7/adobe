@@ -19,3 +19,14 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+
+subprojects {
+    pluginManager.withPlugin("com.android.library") {
+        val android = extensions.findByName("android")
+        if (android != null) {
+            val compileOptions = android.javaClass.getMethod("getCompileOptions").invoke(android)
+            compileOptions.javaClass.getMethod("setSourceCompatibility", JavaVersion::class.java).invoke(compileOptions, JavaVersion.VERSION_17)
+            compileOptions.javaClass.getMethod("setTargetCompatibility", JavaVersion::class.java).invoke(compileOptions, JavaVersion.VERSION_17)
+        }
+    }
+}
