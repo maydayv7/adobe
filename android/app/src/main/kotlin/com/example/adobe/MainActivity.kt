@@ -8,6 +8,7 @@ import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.adobe/image_analyzer"
+    private val INSTAGRAM_CHANNEL = "com.example.adobe/instagram_downloader"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -32,6 +33,32 @@ class MainActivity : FlutterActivity() {
                         }
                     } else {
                         result.error("INVALID_ARGUMENT", "Image path is null", null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, INSTAGRAM_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "downloadInstagramImage" -> {
+                    val url = call.argument<String>("url")
+                    val outputDir = call.argument<String>("outputDir")
+                    if (url != null && outputDir != null) {
+                        try {
+                            val downloadResult = ImageAnalyzer.downloadInstagramImage(url, outputDir)
+                            if (downloadResult != null) {
+                                result.success(downloadResult)
+                            } else {
+                                result.error("DOWNLOAD_ERROR", "Failed to download Instagram image", null)
+                            }
+                        } catch (e: Exception) {
+                            result.error("DOWNLOAD_ERROR", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGUMENT", "URL or output directory is null", null)
                     }
                 }
                 else -> {

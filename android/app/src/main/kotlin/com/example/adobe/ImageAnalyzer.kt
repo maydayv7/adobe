@@ -26,6 +26,18 @@ object ImageAnalyzer {
             null
         }
     }
+
+    fun downloadInstagramImage(url: String, outputDir: String): String? {
+        return try {
+            val py = Python.getInstance()
+            val module = py.getModule("instagram_downloader")
+            val result = module.callAttr("download_instagram_image", url, outputDir)
+            result.toString()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
 }
 
 
