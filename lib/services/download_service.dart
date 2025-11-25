@@ -56,16 +56,16 @@ class DownloadService {
       var contentType = response.headers['content-type'];
       debugPrint("🔹 Type: $contentType");
 
-      // ------------------------------------------------------------
+      
       // CASE A → HTML webpage (NOT a direct image)
-      // ------------------------------------------------------------
+      
       if (contentType != null && !contentType.startsWith('image/')) {
         debugPrint("📄 It's a website. Extracting real image...");
         final document = parser.parse(response.body);
 
-        // ------------------------------------------------------------
+       
         // 1️⃣ GOOGLE PHOTOS / GOOGLEUSERCONTENT.COM
-        // ------------------------------------------------------------
+       
         RegExp googlePhotosRegex = RegExp(
           r'https:\/\/lh3\.googleusercontent\.com\/[a-zA-Z0-9\-\._=]+'
         );
@@ -82,10 +82,9 @@ class DownloadService {
           return downloadAndSaveImage(cdn);
         }
 
-        // ------------------------------------------------------------
+      
         // 2️⃣ GOOGLE IMAGE SEARCH (encrypted-tbn / gstatic)
-        //     FIXED REGEX: stops at first quote, not the JS code!
-        // ------------------------------------------------------------
+        
        RegExp googleImageRegex = RegExp(
           "https:\\/\\/(?:encrypted\\-tbn\\d\\.gstatic\\.com|(?:\\w+\\.)?gstatic\\.com)\\/[^\"'\\s<>]+",
         );
@@ -102,9 +101,8 @@ class DownloadService {
           return downloadAndSaveImage(imgUrl);
         }
 
-        // ------------------------------------------------------------
         // 3️⃣ GOOGLE VIEWER internal imageUrl='https://...'
-        // ------------------------------------------------------------
+  
         RegExp viewerImageRegex =
             RegExp(r"imageUrl='(https:\/\/[^']+)'");
 
@@ -117,9 +115,8 @@ class DownloadService {
           return downloadAndSaveImage(imgUrl);
         }
 
-        // ------------------------------------------------------------
         // 4️⃣ OG IMAGE → Pinterest / Instagram / Wikipedia
-        // ------------------------------------------------------------
+
         final metaTags = document.getElementsByTagName('meta');
         for (var meta in metaTags) {
           if (meta.attributes['property'] == 'og:image') {
@@ -136,9 +133,8 @@ class DownloadService {
         return null;
       }
 
-      // ------------------------------------------------------------
+     
       // CASE B → DIRECT IMAGE FILE (content-type starts with image/)
-      // ------------------------------------------------------------
       final dir = await getApplicationDocumentsDirectory();
       final imagesDir = Directory('${dir.path}/images');
 
