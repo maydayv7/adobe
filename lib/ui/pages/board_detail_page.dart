@@ -91,7 +91,7 @@ class _BoardDetailPageState extends State<BoardDetailPage> {
 
   Future<void> _analyzeImage(String imageId, String imagePath) async {
     try {
-      final result = await LayoutAnalyzerService.analyzeImage(imagePath);
+      final result = await ImageAnalyzerService.analyzeImage(imagePath);
       if (result != null && result['success'] == true) {
         await _imageRepo.updateImageAnalysis(imageId, json.encode(result));
         if (mounted) {

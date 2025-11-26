@@ -190,7 +190,7 @@ class _ShareHandlerPageState extends State<ShareHandlerPage> {
     String imagePath,
   ) async {
     try {
-      final result = await LayoutAnalyzerService.analyzeImage(imagePath);
+      final result = await ImageAnalyzerService.analyzeImage(imagePath);
       if (result != null && result['success'] == true) {
         await _imageRepo.updateImageAnalysis(imageId, json.encode(result));
       }

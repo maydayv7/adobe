@@ -22,6 +22,7 @@ dependencies:
   provider: ^6.1.5+1
   image: ^4.5.4
   flutter_onnxruntime: ^1.6.0
+  onnxruntime: ^1.4.1
 
 dev_dependencies:
   flutter_test:
@@ -37,6 +38,8 @@ flutter:
     - assets/dinov2.onnx
     - assets/dinov2.onnx.data
     - assets/texture_centroids.json
+    - assets/clip_image_encoder.onnx
+    - assets/style_embeddings.json
     
   fonts:
     - family: GeneralSans

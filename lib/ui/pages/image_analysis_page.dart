@@ -1,3 +1,5 @@
+// lib/ui/pages/image_analysis_page.dart
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -68,7 +70,7 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
       await _selectedImage!.copy(targetPath);
 
       // 2. Run Analyses in Parallel
-      final layoutFuture = LayoutAnalyzerService.analyzeImage(targetPath);
+      final layoutFuture = ImageAnalyzerService.analyzeImage(targetPath);
       final textureFuture = _textureService.analyze(targetPath);
 
       final results = await Future.wait([layoutFuture, textureFuture]);

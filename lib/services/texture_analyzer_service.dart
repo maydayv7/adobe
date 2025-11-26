@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:math';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
@@ -22,13 +22,13 @@ class TextureAnalyzerService {
     if (_session != null) return;
 
     try {
-      print("Initializing Texture Service...");
+      debugPrint("Initializing Texture Service...");
       final dir = await getApplicationDocumentsDirectory();
       final modelFile = File('${dir.path}/dinov2.onnx');
       final dataFile = File('${dir.path}/dinov2.onnx.data'); 
 
       if (!await modelFile.exists()) {
-        print("Copying model file from assets...");
+        debugPrint("Copying model file from assets...");
         final data = await rootBundle.load('assets/dinov2.onnx');
         final bytes = data.buffer.asUint8List();
         await modelFile.writeAsBytes(bytes, flush: true);
@@ -38,34 +38,34 @@ class TextureAnalyzerService {
         if (!await dataFile.exists()) {
            try {
              final data = await rootBundle.load('assets/dinov2.onnx.data');
-             print("Copying model weights file...");
+             debugPrint("Copying model weights file...");
              final bytes = data.buffer.asUint8List();
              await dataFile.writeAsBytes(bytes, flush: true);
            } catch (_) { }
         }
       } catch (e) {
-        print("ℹNo external data found (Normal for smaller models).");
+        debugPrint("ℹNo external data found (Normal for smaller models).");
       }
 
       final ort = OnnxRuntime();
       _session = await ort.createSession(modelFile.path);
-      print("ONNX Model loaded");
+      debugPrint("ONNX Model loaded");
 
       final jsonStr = await rootBundle.loadString('assets/texture_centroids.json');
       final Map<String, dynamic> jsonMap = json.decode(jsonStr);
       _centroids = {};
       jsonMap.forEach((k, v) => _centroids![k] = List<double>.from(v));
-      print("Loaded ${_centroids!.length} centroids");
+      debugPrint("Loaded ${_centroids!.length} centroids");
 
     } catch (e) {
-      print("Texture Service Init Error: $e");
+      debugPrint("Texture Service Init Error: $e");
     }
   }
 
   Future<List<Map<String, dynamic>>> analyze(String path) async {
     await _loadResources();
     if (_session == null || _centroids == null) {
-      print("Analyzer not ready.");
+      debugPrint("Analyzer not ready.");
       return [];
     }
 
@@ -73,7 +73,7 @@ class TextureAnalyzerService {
     OrtValue? outputOrt;
 
     try {
-      print("Processing image: $path");
+      debugPrint("Processing image: $path");
 
       // 1. Preprocess
       final bytes = await File(path).readAsBytes();
@@ -96,7 +96,7 @@ class TextureAnalyzerService {
       }
 
       // Debug: Check Input Stats
-      print("Input Tensor: First 5 values: ${inputFloats.sublist(0, 5)}");
+      debugPrint("Input Tensor: First 5 values: ${inputFloats.sublist(0, 5)}");
 
       // 3. Inference
       inputOrt = await OrtValue.fromList(inputFloats, [1, 3, INPUT_SIZE, INPUT_SIZE]);
@@ -114,7 +114,7 @@ class TextureAnalyzerService {
       }
       flatten(outputRaw);
 
-      print("Model Output Size: ${rawOutput.length} (Expected: ${1 * 256 * EMBED_DIM})");
+      debugPrint("Model Output Size: ${rawOutput.length} (Expected: ${1 * 256 * EMBED_DIM})");
 
       // 4. Scoring
       Map<String, double> rawScores = {};
@@ -138,7 +138,7 @@ class TextureAnalyzerService {
         ..sort((a, b) => b.value.compareTo(a.value)); // Descending
 
       if (sorted.isNotEmpty) {
-        print("Top Raw Score: ${sorted.first.key} = ${sorted.first.value}");
+        debugPrint("Top Raw Score: ${sorted.first.key} = ${sorted.first.value}");
       }
 
       // 6. Filtering (Python Equivalent Logic)
@@ -153,13 +153,13 @@ class TextureAnalyzerService {
 
           // 2. Absolute Floor Check
           if (entry.value < ABSOLUTE_FLOOR) {
-            print("   Start skipping ${entry.key} (Score ${entry.value} < Floor $ABSOLUTE_FLOOR)");
+            debugPrint("   Start skipping ${entry.key} (Score ${entry.value} < Floor $ABSOLUTE_FLOOR)");
             continue;
           }
 
           // 3. Relative Threshold Check
           if (entry.value < (topScore * RELATIVE_THRESH)) {
-            print("   Stopping at ${entry.key} (Score ${entry.value} < Relative Threshold ${topScore * RELATIVE_THRESH})");
+            debugPrint("   Stopping at ${entry.key} (Score ${entry.value} < Relative Threshold ${topScore * RELATIVE_THRESH})");
             break;
           }
           
@@ -167,12 +167,12 @@ class TextureAnalyzerService {
         }
       }
 
-      print("Final Results: $finalResults");
+      debugPrint("Final Results: $finalResults");
       return finalResults;
 
     } catch (e, stack) {
-      print("Analysis Failed: $e");
-      print(stack);
+      debugPrint("Analysis Failed: $e");
+      debugPrint(stack.toString());
       return [];
     } finally {
       inputOrt?.dispose();
