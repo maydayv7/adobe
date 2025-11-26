@@ -26,7 +26,6 @@ allow-unauthenticated = [
 # CLAIM / ASSIGN: Allow contributors to self-assign
 # ─────────────────────────────────────────────
 [assign]
-allow-unauthenticated = true  # Anyone can do @bot claim
 auto_assign_on_mention = true
 warn_on_unused_assign = true
 

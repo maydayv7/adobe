@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:adobe/services/theme_service.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:adobe/ui/pages/home_page.dart';
 import 'package:adobe/ui/pages/share_handler_page.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await themeService.loadTheme();
   runApp(const MyApp());
 }
 
@@ -42,11 +45,18 @@ class _MyAppState extends State<MyApp> {
         ReceiveSharingIntent.instance.reset();
       }
     });
+
+    themeService.addListener(_updateTheme);
+  }
+
+  void _updateTheme() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _intentSub.cancel();
+    themeService.removeListener(_updateTheme);
     super.dispose();
   }
 
