@@ -35,4 +35,4 @@ flutter:
   assets:
     - assets/dinov2.onnx
     - assets/dinov2.onnx.data
-    - assets/centroids.json
+    - assets/texture_centroids.json

@@ -10,11 +10,10 @@ import 'package:path_provider/path_provider.dart';
 class TextureAnalyzerService {
   OrtSession? _session;
   Map<String, List<double>>? _centroids;
-  
+
   static const int INPUT_SIZE = 224;
   static const int EMBED_DIM = 384; // S14 model
-  
-  // --- Python Logic Configuration ---
+
   static const int MAX_COUNT = 5;
   static const double RELATIVE_THRESH = 0.85;
   static const double ABSOLUTE_FLOOR = 0.15;
@@ -23,13 +22,13 @@ class TextureAnalyzerService {
     if (_session != null) return;
 
     try {
-      print("📥 Initializing Texture Service...");
+      print("Initializing Texture Service...");
       final dir = await getApplicationDocumentsDirectory();
       final modelFile = File('${dir.path}/dinov2.onnx');
       final dataFile = File('${dir.path}/dinov2.onnx.data'); 
 
       if (!await modelFile.exists()) {
-        print("📦 Copying model file from assets...");
+        print("Copying model file from assets...");
         final data = await rootBundle.load('assets/dinov2.onnx');
         final bytes = data.buffer.asUint8List();
         await modelFile.writeAsBytes(bytes, flush: true);
@@ -39,34 +38,34 @@ class TextureAnalyzerService {
         if (!await dataFile.exists()) {
            try {
              final data = await rootBundle.load('assets/dinov2.onnx.data');
-             print("📦 Copying model weights file...");
+             print("Copying model weights file...");
              final bytes = data.buffer.asUint8List();
              await dataFile.writeAsBytes(bytes, flush: true);
            } catch (_) { }
         }
       } catch (e) {
-        print("ℹ️ No external data found (Normal for smaller models).");
+        print("ℹNo external data found (Normal for smaller models).");
       }
 
       final ort = OnnxRuntime();
       _session = await ort.createSession(modelFile.path);
-      print("✅ ONNX Model loaded");
+      print("ONNX Model loaded");
 
-      final jsonStr = await rootBundle.loadString('assets/centroids.json');
+      final jsonStr = await rootBundle.loadString('assets/texture_centroids.json');
       final Map<String, dynamic> jsonMap = json.decode(jsonStr);
       _centroids = {};
       jsonMap.forEach((k, v) => _centroids![k] = List<double>.from(v));
-      print("✅ Loaded ${_centroids!.length} centroids");
+      print("Loaded ${_centroids!.length} centroids");
 
     } catch (e) {
-      print("❌ Texture Service Init Error: $e");
+      print("Texture Service Init Error: $e");
     }
   }
 
   Future<List<Map<String, dynamic>>> analyze(String path) async {
     await _loadResources();
     if (_session == null || _centroids == null) {
-      print("⚠️ Analyzer not ready.");
+      print("Analyzer not ready.");
       return [];
     }
 
@@ -74,15 +73,15 @@ class TextureAnalyzerService {
     OrtValue? outputOrt;
 
     try {
-      print("🖼️ Processing image: $path");
-      
+      print("Processing image: $path");
+
       // 1. Preprocess
       final bytes = await File(path).readAsBytes();
       final image = img.decodeImage(bytes);
       if (image == null) return [];
 
       final resized = img.copyResize(image, width: INPUT_SIZE, height: INPUT_SIZE);
-      
+
       // 2. Normalize
       final List<double> inputFloats = List.filled(1 * 3 * INPUT_SIZE * INPUT_SIZE, 0.0);
       int pixelIndex = 0;
@@ -95,9 +94,9 @@ class TextureAnalyzerService {
           pixelIndex++;
         }
       }
-      
+
       // Debug: Check Input Stats
-      print("🔍 Input Tensor: First 5 values: ${inputFloats.sublist(0, 5)}");
+      print("Input Tensor: First 5 values: ${inputFloats.sublist(0, 5)}");
 
       // 3. Inference
       inputOrt = await OrtValue.fromList(inputFloats, [1, 3, INPUT_SIZE, INPUT_SIZE]);
@@ -115,15 +114,15 @@ class TextureAnalyzerService {
       }
       flatten(outputRaw);
 
-      print("🧠 Model Output Size: ${rawOutput.length} (Expected: ${1 * 256 * EMBED_DIM})");
+      print("Model Output Size: ${rawOutput.length} (Expected: ${1 * 256 * EMBED_DIM})");
 
       // 4. Scoring
       Map<String, double> rawScores = {};
-      
+
       _centroids!.forEach((name, centroid) {
         double sumSim = 0.0;
         int patches = 256;
-        
+
         for (int i = 0; i < patches; i++) {
           int start = i * EMBED_DIM;
           if (start + EMBED_DIM <= rawOutput.length) {
@@ -139,27 +138,25 @@ class TextureAnalyzerService {
         ..sort((a, b) => b.value.compareTo(a.value)); // Descending
 
       if (sorted.isNotEmpty) {
-        print("🏆 Top Raw Score: ${sorted.first.key} = ${sorted.first.value}");
+        print("Top Raw Score: ${sorted.first.key} = ${sorted.first.value}");
       }
 
       // 6. Filtering (Python Equivalent Logic)
       List<Map<String, dynamic>> finalResults = [];
-      
+
       if (sorted.isNotEmpty) {
         double topScore = sorted.first.value;
-        
+
         for (var entry in sorted) {
           // 1. Max Count Check
           if (finalResults.length >= MAX_COUNT) break;
-          
+
           // 2. Absolute Floor Check
           if (entry.value < ABSOLUTE_FLOOR) {
             print("   Start skipping ${entry.key} (Score ${entry.value} < Floor $ABSOLUTE_FLOOR)");
-            continue; // Python code 'continue' here implies skipping bad matches but checking others? 
-                      // Actually Python loop is sorted, so if it's garbage, usually subsequent ones are too, 
-                      // but 'continue' is strictly what was in your python code.
+            continue;
           }
-          
+
           // 3. Relative Threshold Check
           if (entry.value < (topScore * RELATIVE_THRESH)) {
             print("   Stopping at ${entry.key} (Score ${entry.value} < Relative Threshold ${topScore * RELATIVE_THRESH})");
@@ -170,11 +167,11 @@ class TextureAnalyzerService {
         }
       }
 
-      print("✅ Final Results: $finalResults");
+      print("Final Results: $finalResults");
       return finalResults;
 
     } catch (e, stack) {
-      print("❌ Analysis Failed: $e");
+      print("Analysis Failed: $e");
       print(stack);
       return [];
     } finally {
