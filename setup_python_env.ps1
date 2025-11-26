@@ -5,19 +5,19 @@ $VenvDir = Join-Path $ScriptDir "python_env"
 
 Write-Host "Setting up Python virtual environment..."
 
-# Detect Python 3.11 using Python launcher
+# Detect Python 3.8 using Python launcher
 $PythonCmd = $null
 
 try {
-    $v = & py -3.11 --version 2>$null
-    if ($LASTEXITCODE -eq 0 -and $v -like "Python 3.11*") {
-        $PythonCmd = @("py", "-3.11")
+    $v = & py -3.8 --version 2>$null
+    if ($LASTEXITCODE -eq 0 -and $v -like "Python 3.8*") {
+        $PythonCmd = @("py", "-3.8")
     }
 }
 catch {}
 
 if (-not $PythonCmd) {
-    Write-Host "ERROR: Python 3.11 is required but not found" -ForegroundColor Red
+    Write-Host "ERROR: Python 3.8 is required but not found" -ForegroundColor Red
     exit 1
 }
 

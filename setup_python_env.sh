@@ -10,24 +10,24 @@ VENV_DIR="$SCRIPT_DIR/python_env"
 
 echo "Setting up Python virtual environment for Chaquopy builds..."
 
-# Check if Python 3.11 is available
-if command -v python3.11 &> /dev/null; then
-    PYTHON_CMD="python3.11"
+# Check if Python 3.8 is available
+if command -v python3.8 &> /dev/null; then
+    PYTHON_CMD="python3.8"
 elif command -v python3 &> /dev/null; then
     PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-    if [ "$PYTHON_VERSION" = "3.11" ]; then
+    if [ "$PYTHON_VERSION" = "3.8" ]; then
         PYTHON_CMD="python3"
     else
-        echo "Error: Python 3.11 is required but not found."
-        echo "Please install Python 3.11:"
-        echo "  macOS: brew install python@3.11"
-        echo "  Linux: sudo apt-get install python3.11 python3.11-venv"
+        echo "Error: Python 3.8 is required but not found."
+        echo "Please install Python 3.8:"
+        echo "  macOS: brew install python@3.8"
+        echo "  Linux: sudo apt-get install python3.8 python3.8-venv"
         echo "  Or download from https://www.python.org/downloads/"
         exit 1
     fi
 else
-    echo "Error: Python 3.11 is required but not found."
-    echo "Please install Python 3.11 first."
+    echo "Error: Python 3.8 is required but not found."
+    echo "Please install Python 3.8 first."
     exit 1
 fi
 

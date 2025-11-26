@@ -1,11 +1,11 @@
-// lib/ui/pages/image_analysis_page.dart
-
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:adobe/services/layout_analyzer_service.dart';
-import 'package:adobe/services/texture_analyzer_service.dart';
+import 'package:adobe/services/image_analyzer_service.dart';
+import 'package:adobe/data/models/image_model.dart';
+import '../widgets/analysis_dialog.dart';
 
 class ImageAnalysisPage extends StatefulWidget {
   const ImageAnalysisPage({super.key});
@@ -16,39 +16,23 @@ class ImageAnalysisPage extends StatefulWidget {
 
 class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
   File? _selectedImage;
-  
-  // Results
-  Map<String, dynamic>? _layoutResult;
-  List<Map<String, dynamic>>? _textureResult;
-  
+  Map<String, dynamic>? _fullResult;
   bool _isAnalyzing = false;
   String? _errorMessage;
-
-  final _textureService = TextureAnalyzerService();
-
-  @override
-  void dispose() {
-    _textureService.dispose();
-    super.dispose();
-  }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(source: source);
-
       if (image != null) {
         setState(() {
           _selectedImage = File(image.path);
-          _layoutResult = null;
-          _textureResult = null;
+          _fullResult = null;
           _errorMessage = null;
         });
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Error picking image: $e';
-      });
+      setState(() => _errorMessage = 'Error: $e');
     }
   }
 
@@ -58,37 +42,21 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
     setState(() {
       _isAnalyzing = true;
       _errorMessage = null;
-      _layoutResult = null;
-      _textureResult = null;
     });
 
     try {
-      // 1. Prepare File
       final appDir = await getApplicationDocumentsDirectory();
       final fileName = _selectedImage!.path.split('/').last;
       final targetPath = '${appDir.path}/$fileName';
       await _selectedImage!.copy(targetPath);
 
-      // 2. Run Analyses in Parallel
-      final layoutFuture = ImageAnalyzerService.analyzeImage(targetPath);
-      final textureFuture = _textureService.analyze(targetPath);
-
-      final results = await Future.wait([layoutFuture, textureFuture]);
+      // Use the centralized master runner
+      final result = await ImageAnalyzerService.analyzeFullSuite(targetPath);
 
       if (mounted) {
         setState(() {
           _isAnalyzing = false;
-          
-          // Handle Layout Result
-          final lResult = results[0] as Map<String, dynamic>?;
-          if (lResult != null && lResult['success'] == true) {
-            _layoutResult = lResult;
-          } else {
-            _errorMessage = lResult?['error'] ?? 'Layout analysis failed';
-          }
-
-          // Handle Texture Result
-          _textureResult = results[1] as List<Map<String, dynamic>>?;
+          _fullResult = result;
         });
       }
     } catch (e) {
@@ -102,13 +70,12 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Composition & Texture')),
+      appBar: AppBar(title: const Text('Image Analysis')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Image Preview
             Container(
               height: 250,
               decoration: BoxDecoration(
@@ -122,7 +89,6 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
                 ? const Center(child: Icon(Icons.image, size: 50, color: Colors.grey))
                 : null,
             ),
-            
             const SizedBox(height: 16),
             
             Row(children: [
@@ -136,56 +102,43 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
                 icon: const Icon(Icons.camera_alt), label: const Text("Camera"))
               ),
             ]),
-
             const SizedBox(height: 16),
-
+            
             ElevatedButton(
               onPressed: (_selectedImage != null && !_isAnalyzing) ? _runAnalysis : null,
               style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
               child: _isAnalyzing 
                 ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("Analyze Image"),
+                : const Text("Run Full Analysis"),
             ),
-
-            if (_errorMessage != null) ...[
-              const SizedBox(height: 16),
-              Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-            ],
+            
+            if (_errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top:16),
+                child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+              ),
 
             const SizedBox(height: 24),
 
-            // --- RESULTS ---
-            
-            // Texture Results
-            if (_textureResult != null && _textureResult!.isNotEmpty) ...[
-              const Text("🧶 Texture & Material", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _textureResult!.map((t) => Chip(
-                  avatar: CircleAvatar(
-                    backgroundColor: Colors.blue.shade900,
-                    child: Text("${(t['score']*100).toInt()}", style: const TextStyle(fontSize: 10, color: Colors.white)),
-                  ),
-                  label: Text(t['name']),
-                  backgroundColor: Colors.blue.shade50,
-                )).toList(),
-              ),
-              const Divider(height: 30),
-            ],
-
-            // Layout Results
-            if (_layoutResult != null) ...[
-              const Text("📐 Layout & Composition", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              ...(_layoutResult!['top5'] as List).map((item) => ListTile(
-                title: Text(item['name']),
-                trailing: Text("${(item['score']*100).toStringAsFixed(1)}%", style: const TextStyle(fontWeight: FontWeight.bold)),
-                contentPadding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
-              )),
-            ]
+            // Re-use the AnalysisDialog logic by mocking an ImageModel
+            if (_fullResult != null)
+              // We wrap the result in a dummy ImageModel to reuse the visualization widget
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // Mocking the data format stored in DB
+                  final mockImage = ImageModel(
+                    id: 'temp', 
+                    filePath: _selectedImage!.path, 
+                    analysisData: json.encode(_fullResult)
+                  );
+                  
+                  // Display the content of AnalysisDialog inline
+                  return SizedBox(
+                    height: 600,
+                    child: AnalysisDialog(image: mockImage),
+                  );
+                },
+              )
           ],
         ),
       ),

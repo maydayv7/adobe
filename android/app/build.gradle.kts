@@ -30,7 +30,7 @@ android {
 
     kotlin {
         compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
 
@@ -70,6 +70,8 @@ chaquopy {
             install("numpy")
             install("opencv-contrib-python-headless")
             install("instaloader")
+            install("scikit-learn")
+            install("joblib")
         }
     }
 }
