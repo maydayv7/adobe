@@ -5,23 +5,23 @@ A Flutter project with Python image analysis using Chaquopy.
 ## Prerequisites
 
 - Flutter SDK
-- Python 3.11 (for build-time)
+- Python 3.8 (for build-time)
 - Android SDK
 
 ## Setup
 
-### 1. Install Python 3.11
+### 1. Install Python 3.8
 
 **macOS:**
 
 ```bash
-brew install python@3.11
+brew install python@3.8
 ```
 
 **Linux:**
 
 ```bash
-sudo apt-get install python3.11 python3.11-venv
+sudo apt-get install python3.8 python3.8-venv
 ```
 
 **Windows:**
@@ -35,7 +35,7 @@ Run the setup script to create a Python virtual environment in the repository:
 ./setup_python_env.sh
 ```
 
-This creates a `python_env` directory with Python 3.11, which will be used by the build system. This ensures all developers use the same Python version.
+This creates a `python_env` directory with Python 3.8, which will be used by the build system. This ensures all developers use the same Python version.
 
 ### 3. Build the APK
 
@@ -52,5 +52,5 @@ flutter build apk --release
 ## Notes
 
 - The Python runtime version (embedded in the app) is **3.8** (configured in `android/app/build.gradle.kts`)
-- The build-time Python version is **3.11** (from the virtual environment)
+- The build-time Python version is **3.8** (from the virtual environment)
 - The virtual environment is used only during build, not at runtime
