@@ -41,3 +41,4 @@ app.*.map.json
 /android/app/release
 # Python virtual environment
 python_env/
+assets/clip_vitb32_image.onnx
