@@ -79,6 +79,8 @@ chaquopy {
             install("numpy")
             install("opencv-python-headless")
             install("instaloader")
+            install("scikit-learn")
+            install("joblib")
         }
     }
 }
