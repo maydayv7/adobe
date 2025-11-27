@@ -1,5 +1,3 @@
-// lib/services/image_analyzer_service.dart
-
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
@@ -236,7 +234,7 @@ class ImageAnalyzerService {
             'Style': {"scores": results[3]['scores']},
             'Texture': {"scores": results[2]['scores']},
             'Lighting': {"scores": results[5]['scores']},
-            'Colour Pallete': {"scores": results[1]['scores']},
+            'Colour Palette': {"scores": results[1]['scores']},
             'Emotions': {"scores": results[4]['scores']},
             'Era': {"scores": results[6]['scores']},
             'Layout': {"scores": results[0]['scores']}
@@ -257,7 +255,7 @@ class ImageAnalyzerService {
             'Style': {"scores": {}},
             'Texture': {"scores": {}},
             'Lighting': {"scores": {}},
-            'Colour Pallete': {"scores": {}},
+            'Colour Palette': {"scores": {}},
             'Emotions': {"scores": {}},
             'Era': {"scores": {}},
           }

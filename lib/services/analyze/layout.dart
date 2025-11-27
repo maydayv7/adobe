@@ -1,7 +1,5 @@
-// lib/services/layout_analyzer_service.dart
-
 import 'package:flutter/foundation.dart';
-import 'python_service.dart';
+import '../python_service.dart';
 
 class LayoutAnalyzerService {
   final PythonService _pythonService = PythonService();

@@ -19,7 +19,6 @@ class _ShareHandlerPageState extends State<ShareHandlerPage> {
   final _instagramService = InstagramDownloadService();
 
   // State
-  bool _isProcessing = true;
   bool _hasError = false;
   String? _errorMessage;
 
@@ -31,12 +30,12 @@ class _ShareHandlerPageState extends State<ShareHandlerPage> {
 
   Future<void> _processSharedContent() async {
     final sharedContent = widget.sharedText.trim();
-    File? finalFile;
+    List<File> finalFiles = [];
 
     try {
       // CASE A: It's a Local File Path
       if (await File(sharedContent).exists()) {
-        finalFile = File(sharedContent);
+        finalFiles.add(File(sharedContent));
       }
       // CASE B: It's a URL
       else {
@@ -48,20 +47,15 @@ class _ShareHandlerPageState extends State<ShareHandlerPage> {
 
           if (url.contains('instagram.com')) {
             // Instagram Logic
-            // Assuming the service returns a List of file paths
-            final downloadedPaths = await _instagramService
-                .downloadInstagramImage(url);
-
+            final downloadedPaths = await _instagramService.downloadInstagramImage(url);
             if (downloadedPaths != null && downloadedPaths.isNotEmpty) {
-              finalFile = File(downloadedPaths.first);
+              finalFiles.addAll(downloadedPaths.map((path) => File(path)));
             }
           } else {
             // Generic Download Logic
-            // Ensure this service returns the String path of the saved file
             final savedPath = await _downloadService.downloadAndSaveImage(url);
-
             if (savedPath != null) {
-              finalFile = File(savedPath);
+              finalFiles.add(File(savedPath));
             }
           }
         } else {
@@ -70,24 +64,23 @@ class _ShareHandlerPageState extends State<ShareHandlerPage> {
       }
 
       // SUCCESS: Navigate to ShareToMoodboardPage
-      if (finalFile != null && await finalFile.exists()) {
+      if (finalFiles.isNotEmpty) {
         if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => ShareToMoodboardPage(imageFile: finalFile!),
+              builder: (_) => ShareToMoodboardPage(imageFiles: finalFiles),
             ),
           );
         }
       } else {
-        throw Exception("Could not retrieve image file.");
+        throw Exception("Could not retrieve any media files.");
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _hasError = true;
           _errorMessage = e.toString();
-          _isProcessing = false;
         });
       }
     }
@@ -97,47 +90,38 @@ class _ShareHandlerPageState extends State<ShareHandlerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(title: const Text("Processing...")),
+      appBar: AppBar(title: const Text("Processing")),
       body: Center(
-        child:
-            _hasError
-                ? Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: Colors.red,
-                        size: 50,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        "Error processing media",
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _errorMessage ?? "Unknown Error",
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text("Close"),
-                      ),
-                    ],
-                  ),
-                )
-                : const Column(
+        child: _hasError
+            ? Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 20),
-                    Text("Analyzing & Preparing Image..."),
+                    const Icon(Icons.error_outline, color: Colors.red, size: 50),
+                    const SizedBox(height: 16),
+                    Text("Error processing media",
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    Text(_errorMessage ?? "Unknown Error",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("Close"),
+                    ),
                   ],
                 ),
+              )
+            : const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 20),
+                  Text("Downloading media..."),
+                ],
+              ),
       ),
     );
   }

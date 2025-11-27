@@ -1,14 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
-
-// Models & Repos
 import '../../data/models/project_model.dart';
 import '../../data/repos/project_repo.dart';
-
-// Services
 import '../../services/project_service.dart';
-import '../../services/image_service.dart'; // <--- CHANGED: Import ImageService
+import '../../services/image_service.dart';
 
 // Helper model for UI rendering
 class ProjectItemViewModel {
@@ -23,9 +19,8 @@ class ProjectItemViewModel {
 }
 
 class ShareToMoodboardPage extends StatefulWidget {
-  final File imageFile;
-
-  const ShareToMoodboardPage({super.key, required this.imageFile});
+  final List<File> imageFiles;
+  const ShareToMoodboardPage({super.key, required this.imageFiles});
 
   @override
   State<ShareToMoodboardPage> createState() => _ShareToMoodboardPageState();
@@ -34,8 +29,6 @@ class ShareToMoodboardPage extends StatefulWidget {
 class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
   final ProjectRepo _projectRepo = ProjectRepo();
   final ProjectService _projectService = ProjectService();
-
-  // FIXED: Use ImageService (which handles Moodboard Images)
   final ImageService _imageService = ImageService();
 
   List<ProjectItemViewModel> _recentViewModels = [];
@@ -53,30 +46,24 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
     _loadData();
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    try {
+      final recentItems = await _projectRepo.getRecentProjectsAndEvents();
+      final allItems = await _projectRepo.getAllProjectsAndEvents();
 
-    // Fetch raw data
-    final recentItems = await _projectRepo.getRecentProjectsAndEvents();
-    final allItems = await _projectRepo.getAllProjectsAndEvents();
+      _recentViewModels = await _buildViewModels(recentItems.take(3).toList());
+      _allViewModels = await _buildViewModels(allItems);
+      _filteredViewModels = _allViewModels;
 
-    // Build view models with parent titles
-    _recentViewModels = await _buildViewModels(recentItems.take(3).toList());
-    _allViewModels = await _buildViewModels(allItems);
-    _filteredViewModels = _allViewModels;
-
-    setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      debugPrint("Error loading projects: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
-  Future<List<ProjectItemViewModel>> _buildViewModels(
-    List<ProjectModel> items,
-  ) async {
+  Future<List<ProjectItemViewModel>> _buildViewModels(List<ProjectModel> items) async {
     final List<ProjectItemViewModel> viewModels = [];
     for (var item in items) {
       String? parentTitle;
@@ -84,9 +71,7 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
         final parent = await _projectRepo.getProjectById(item.parentId!);
         parentTitle = parent?.title;
       }
-      viewModels.add(
-        ProjectItemViewModel(item: item, parentTitle: parentTitle),
-      );
+      viewModels.add(ProjectItemViewModel(item: item, parentTitle: parentTitle));
     }
     return viewModels;
   }
@@ -97,16 +82,11 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
       if (query.isEmpty) {
         _filteredViewModels = _allViewModels;
       } else {
-        _filteredViewModels =
-            _allViewModels.where((vm) {
-              final titleMatches = vm.title.toLowerCase().contains(
-                query.toLowerCase(),
-              );
-              final parentMatches =
-                  vm.parentTitle?.toLowerCase().contains(query.toLowerCase()) ??
-                  false;
-              return titleMatches || parentMatches;
-            }).toList();
+        _filteredViewModels = _allViewModels.where((vm) {
+          final titleMatches = vm.title.toLowerCase().contains(query.toLowerCase());
+          final parentMatches = vm.parentTitle?.toLowerCase().contains(query.toLowerCase()) ?? false;
+          return titleMatches || parentMatches;
+        }).toList();
       }
     });
   }
@@ -115,30 +95,25 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
     final controller = TextEditingController();
     final String? title = await showDialog<String>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text("New Project"),
-            content: TextField(
-              controller: controller,
-              decoration: const InputDecoration(hintText: "Project Title"),
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Cancel"),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, controller.text.trim()),
-                child: const Text("Create"),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text("New Project"),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: "Project Title"),
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text("Create"),
           ),
+        ],
+      ),
     );
 
     if (title != null && title.isNotEmpty) {
-      // Create the project and save the image to it immediately
       final newId = await _projectService.createProject(title);
       await _saveAndExit(newId);
     }
@@ -148,8 +123,8 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
     setState(() => _isSaving = true);
 
     try {
-      // 1. Save Image to Moodboard (Using ImageService)
-      await _imageService.saveImage(widget.imageFile, projectId);
+      // 1. Save Images to Moodboard
+      await _imageService.saveImages(widget.imageFiles, projectId);
 
       // 2. Update "Recently Used" status
       await _projectService.openProject(projectId);
@@ -158,24 +133,19 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
       ReceiveSharingIntent.instance.reset();
 
       if (mounted) {
+        final count = widget.imageFiles.length;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Saved to Moodboard!"),
+          SnackBar(
+            content: Text("Saved $count image${count > 1 ? 's' : ''} to Moodboard!"),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.popUntil(
-          context,
-          (route) => route.isFirst,
-        ); // Go back to home
+        Navigator.popUntil(context, (route) => route.isFirst);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error saving: $e"),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text("Error saving: $e"), backgroundColor: Colors.red),
         );
         setState(() => _isSaving = false);
       }
@@ -193,10 +163,7 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          "MoodBoards",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
+        title: const Text("Select Moodboard", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
             icon: const Icon(Icons.add, color: Colors.black, size: 28),

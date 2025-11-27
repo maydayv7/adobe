@@ -1,11 +1,10 @@
-// lib/services/texture_analyzer_service.dart
-
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:onnxruntime/onnxruntime.dart';
-import '../../utils/image_utils.dart';
+import 'package:adobe/utils/image_utils.dart';
+import 'package:adobe/utils/clip_image_processor.dart';
 
 class TextureAnalyzerService {
   OrtSession? _session;

@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
-import 'package:adobe/data/repos/image_repo.dart';
 import 'package:html/parser.dart' as parser;
 
 class DownloadService {
-  final _repo = ImageRepository();
   final _uuid = const Uuid();
 
   String _unescapeUrl(String s) {
@@ -36,7 +34,7 @@ class DownloadService {
   }
 
   Future<String?> downloadAndSaveImage(String url) async {
-    debugPrint("📥 START PROCESS: $url");
+    debugPrint("START DOWNLOAD: $url");
 
     try {
       // Fetch URL
@@ -56,16 +54,12 @@ class DownloadService {
       var contentType = response.headers['content-type'];
       debugPrint("Type: $contentType");
 
-      
       // CASE A → HTML webpage (NOT a direct image)
-      
       if (contentType != null && !contentType.startsWith('image/')) {
         debugPrint("It's a website. Extracting real image...");
         final document = parser.parse(response.body);
 
-       
-        // 1️⃣ GOOGLE PHOTOS / GOOGLEUSERCONTENT.COM
-       
+        // 1️1. GOOGLE PHOTOS / GOOGLEUSERCONTENT.COM
         RegExp googlePhotosRegex = RegExp(
           r'https:\/\/lh3\.googleusercontent\.com\/[a-zA-Z0-9\-\._=]+'
         );
@@ -73,50 +67,38 @@ class DownloadService {
         var matchPhotos = googlePhotosRegex.firstMatch(response.body);
         if (matchPhotos != null) {
           String cdn = matchPhotos.group(0)!;
-
           // Force highest resolution
           cdn = _unescapeUrl(cdn);
           cdn = "${cdn.split("=").first}=s0";
           debugPrint("Google Photos Image Found: $cdn");
-
           return downloadAndSaveImage(cdn);
         }
 
-      
-        // 2️⃣ GOOGLE IMAGE SEARCH (encrypted-tbn / gstatic)
-        
-       RegExp googleImageRegex = RegExp(
+        // 2️2. GOOGLE IMAGE SEARCH
+        RegExp googleImageRegex = RegExp(
           "https:\\/\\/(?:encrypted\\-tbn\\d\\.gstatic\\.com|(?:\\w+\\.)?gstatic\\.com)\\/[^\"'\\s<>]+",
         );
-
-
-
 
         var matchGImg = googleImageRegex.firstMatch(response.body);
         if (matchGImg != null) {
           String imgUrl = matchGImg.group(0)!;
           imgUrl = _unescapeUrl(imgUrl);
-          debugPrint("🔍 Google Images Real URL: $imgUrl");
-
+          debugPrint("Google Images Real URL: $imgUrl");
           return downloadAndSaveImage(imgUrl);
         }
 
-        // 3️⃣ GOOGLE VIEWER internal imageUrl='https://...'
-  
-        RegExp viewerImageRegex =
-            RegExp(r"imageUrl='(https:\/\/[^']+)'");
+        // 3️3. GOOGLE VIEWER
+        RegExp viewerImageRegex = RegExp(r"imageUrl='(https:\/\/[^']+)'");
 
         var viewerMatch = viewerImageRegex.firstMatch(response.body);
         if (viewerMatch != null) {
           String imgUrl = viewerMatch.group(1)!;
           imgUrl = _unescapeUrl(imgUrl);
           debugPrint("Google Viewer Direct Image: $imgUrl");
-
           return downloadAndSaveImage(imgUrl);
         }
 
-        // 4️⃣ OG IMAGE → Pinterest / Instagram / Wikipedia
-
+        // 4️4. OG IMAGE → Pinterest / Instagram / Wikipedia
         final metaTags = document.getElementsByTagName('meta');
         for (var meta in metaTags) {
           if (meta.attributes['property'] == 'og:image') {
@@ -133,7 +115,6 @@ class DownloadService {
         return null;
       }
 
-     
       // CASE B → DIRECT IMAGE FILE (content-type starts with image/)
       final dir = await getApplicationDocumentsDirectory();
       final imagesDir = Directory('${dir.path}/images');
@@ -160,10 +141,8 @@ class DownloadService {
       final file = File(filePath);
       await file.writeAsBytes(response.bodyBytes);
 
-      await _repo.insertImage(imageId, filePath);
-
       debugPrint("Saved Successfully! → $filePath");
-      return imageId;
+      return filePath; 
     } catch (e) {
       debugPrint("Error: $e");
       return null;

@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../../data/models/project_model.dart';
-import '../../data/repos/project_repo.dart';
-import '../../data/repos/image_repo.dart';
-import '../../services/project_service.dart';
-import 'image_analysis_page.dart';
+import 'package:adobe/data/models/project_model.dart';
+import 'package:adobe/data/repos/project_repo.dart';
+import 'package:adobe/data/repos/image_repo.dart';
+import 'package:adobe/services/project_service.dart';
 import 'project_detail_page.dart';
+import 'image_analysis_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -279,7 +279,7 @@ class _HomePageState extends State<HomePage> {
                           child: Row(
                             children: [
                               Text(
-                                "Your Project",
+                                "Your Projects",
                                 style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w600,

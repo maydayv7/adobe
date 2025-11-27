@@ -1,13 +1,13 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../../data/models/project_model.dart';
-import '../../data/models/image_model.dart';
-import '../../data/models/file_model.dart';
-import '../../data/repos/project_repo.dart';
-import '../../data/repos/image_repo.dart';
-import '../../data/repos/file_repo.dart';
-import '../../services/project_service.dart';
+import 'package:adobe/data/models/project_model.dart';
+import 'package:adobe/data/models/image_model.dart';
+import 'package:adobe/data/models/file_model.dart';
+import 'package:adobe/data/repos/project_repo.dart';
+import 'package:adobe/data/repos/image_repo.dart';
+import 'package:adobe/data/repos/file_repo.dart';
+import 'package:adobe/services/project_service.dart';
 
 class ProjectDetailPage extends StatefulWidget {
   final int projectId;
