@@ -1,11 +1,10 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:adobe/services/image_analyzer_service.dart';
-import 'package:adobe/data/models/image_model.dart';
-import '../widgets/analysis_dialog.dart';
+
+import 'package:adobe/services/analyze/image_analyzer.dart';
 
 class ImageAnalysisPage extends StatefulWidget {
   const ImageAnalysisPage({super.key});
@@ -16,8 +15,8 @@ class ImageAnalysisPage extends StatefulWidget {
 
 class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
   File? _selectedImage;
-  Map<String, dynamic>? _fullResult;
   bool _isAnalyzing = false;
+  Map<String, dynamic>? _analysisResult;
   String? _errorMessage;
 
   Future<void> _pickImage(ImageSource source) async {
@@ -27,120 +26,193 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
       if (image != null) {
         setState(() {
           _selectedImage = File(image.path);
-          _fullResult = null;
+          _analysisResult = null;
           _errorMessage = null;
         });
+        // Auto-run analysis when a new image is picked
+        _runAnalysis(image.path);
       }
     } catch (e) {
-      setState(() => _errorMessage = 'Error: $e');
+      setState(() => _errorMessage = 'Error picking image: $e');
     }
   }
 
-  Future<void> _runAnalysis() async {
-    if (_selectedImage == null) return;
-
+  Future<void> _runAnalysis(String sourcePath) async {
     setState(() {
       _isAnalyzing = true;
       _errorMessage = null;
     });
 
     try {
+      // 1. Copy image to app doc dir (simulating real app behavior & safe access)
       final appDir = await getApplicationDocumentsDirectory();
-      final fileName = _selectedImage!.path.split('/').last;
+      final fileName = sourcePath.split('/').last;
       final targetPath = '${appDir.path}/$fileName';
-      await _selectedImage!.copy(targetPath);
+      
+      // Copying ensures the analyzer service can access it freely
+      final file = File(sourcePath);
+      await file.copy(targetPath);
 
-      // Use the centralized master runner
+      // 2. Run the Full Suite Analysis
       final result = await ImageAnalyzerService.analyzeFullSuite(targetPath);
 
       if (mounted) {
         setState(() {
+          _analysisResult = result;
           _isAnalyzing = false;
-          _fullResult = result;
         });
       }
     } catch (e) {
-      setState(() {
-        _isAnalyzing = false;
-        _errorMessage = 'Analysis Error: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isAnalyzing = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Image Analysis')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              height: 250,
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(12),
-                image: _selectedImage != null 
-                  ? DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover)
-                  : null
-              ),
-              child: _selectedImage == null 
-                ? const Center(child: Icon(Icons.image, size: 50, color: Colors.grey))
-                : null,
-            ),
-            const SizedBox(height: 16),
-            
-            Row(children: [
-              Expanded(child: OutlinedButton.icon(
-                onPressed: () => _pickImage(ImageSource.gallery), 
-                icon: const Icon(Icons.photo), label: const Text("Gallery"))
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: OutlinedButton.icon(
-                onPressed: () => _pickImage(ImageSource.camera), 
-                icon: const Icon(Icons.camera_alt), label: const Text("Camera"))
-              ),
-            ]),
-            const SizedBox(height: 16),
-            
-            ElevatedButton(
-              onPressed: (_selectedImage != null && !_isAnalyzing) ? _runAnalysis : null,
-              style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
-              child: _isAnalyzing 
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("Analyze Image"),
-            ),
-            
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(top:16),
-                child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-              ),
+      appBar: AppBar(title: const Text("Image Analysis Debug")),
+      body: Column(
+        children: [
+          // --- Top Section: Image Preview & Controls ---
+          Container(
+            height: 220,
+            width: double.infinity,
+            color: Colors.grey[200], // Neutral grey background for image area
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (_selectedImage != null)
+                  Image.file(_selectedImage!, fit: BoxFit.contain)
+                else
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.image_search, size: 48, color: Colors.grey),
+                      const SizedBox(height: 8),
+                      Text("No image selected", style: TextStyle(color: Colors.grey[600])),
+                    ],
+                  ),
+                
+                // Loading Overlay
+                if (_isAnalyzing)
+                  Container(
+                    color: Colors.black54,
+                    child: const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                  ),
 
-            const SizedBox(height: 24),
+                // Control Buttons (Bottom Right)
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FloatingActionButton.small(
+                        heroTag: "cam",
+                        onPressed: () => _pickImage(ImageSource.camera),
+                        child: const Icon(Icons.camera_alt),
+                      ),
+                      const SizedBox(width: 8),
+                      FloatingActionButton.small(
+                        heroTag: "gal",
+                        onPressed: () => _pickImage(ImageSource.gallery),
+                        child: const Icon(Icons.photo_library),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
 
-            // Re-use the AnalysisDialog logic by mocking an ImageModel
-            if (_fullResult != null)
-              // We wrap the result in a dummy ImageModel to reuse the visualization widget
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  // Mocking the data format stored in DB
-                  final mockImage = ImageModel(
-                    id: 'temp', 
-                    filePath: _selectedImage!.path, 
-                    analysisData: json.encode(_fullResult)
-                  );
-                  
-                  // Display the content of AnalysisDialog inline
-                  return SizedBox(
-                    height: 600,
-                    child: AnalysisDialog(image: mockImage),
-                  );
-                },
-              )
-          ],
+          // --- Bottom Section: Results or Error ---
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              color: Colors.grey[100], // Light background for the scroll area
+              child: _buildContent(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Text(
+            "❌ Error:\n$_errorMessage",
+            style: const TextStyle(color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
         ),
+      );
+    }
+
+    if (_analysisResult == null) {
+      return const Center(
+        child: Text("Upload an image to view raw analysis data."),
+      );
+    }
+
+    // Pretty Print JSON
+    const encoder = JsonEncoder.withIndent('  ');
+    final String prettyJson = encoder.convert(_analysisResult);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "RAW JSON OUTPUT",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // --- JSON VIEWER CONTAINER ---
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white, // FORCE WHITE BACKGROUND
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: SelectableText(
+              prettyJson,
+              style: const TextStyle(
+                fontFamily: 'monospace', 
+                fontSize: 11,
+                color: Colors.black87, // FORCE DARK TEXT
+                height: 1.3,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }

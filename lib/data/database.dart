@@ -1,8 +1,15 @@
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
+import 'models/project_model.dart';
+import 'models/image_model.dart';
+import 'models/file_model.dart';
+import 'models/note_model.dart';
+
 class AppDatabase {
   static Database? _db;
+  static const String _dbName = 'database_v2.db';
 
   static Future<Database> get db async {
     if (_db != null) return _db!;
@@ -11,100 +18,69 @@ class AppDatabase {
   }
 
   static Future<Database> _init() async {
-    final path = join(await getDatabasesPath(), 'pinterest.db');
+    final path = join(await getDatabasesPath(), _dbName);
 
     return await openDatabase(
       path,
-      version: 4, // Incremented to 4 for Comments table
+      version: 1,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: (db, version) async {
-        // 1. Images Table
+        // 1. PROJECTS
+        await db.execute('''
+          CREATE TABLE projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            parent_id INTEGER, 
+            global_stylesheet TEXT,
+            last_accessed_at TEXT,
+            created_at TEXT,
+            FOREIGN KEY (parent_id) REFERENCES projects (id) ON DELETE CASCADE
+          )
+        ''');
+
+        // 2. IMAGES (Moodboard)
         await db.execute('''
           CREATE TABLE images (
             id TEXT PRIMARY KEY,
-            filePath TEXT,
-            createdAt TEXT,
-            analysis_data TEXT
-          )
-        ''');
-
-        // 2. Categories Table
-        await db.execute('''
-          CREATE TABLE board_categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
             name TEXT,
-            createdAt TEXT
+            tags TEXT DEFAULT '[]', 
+            analysis_data TEXT,
+            created_at TEXT,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
           )
         ''');
 
-        // 3. Boards Table
+        // 3. FILES (Project Work)
         await db.execute('''
-          CREATE TABLE boards (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+          CREATE TABLE files (
+            id TEXT PRIMARY KEY,
+            project_id INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
             name TEXT,
-            category_id INTEGER,
-            createdAt TEXT,
-            FOREIGN KEY (category_id) REFERENCES board_categories (id)
+            description TEXT,
+            tags TEXT DEFAULT '[]',
+            last_updated TEXT,
+            created_at TEXT,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
           )
         ''');
 
-        // 4. Junction Table
+        // 4. NOTES
         await db.execute('''
-          CREATE TABLE board_images (
+          CREATE TABLE notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            board_id INTEGER,
-            image_id TEXT,
-            createdAt TEXT
-          )
-        ''');
-
-        // 5. Comments Table (New)
-        await db.execute('''
-          CREATE TABLE comments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            image_id TEXT,
+            image_id TEXT NOT NULL,
             content TEXT,
-            comment_type TEXT,
-            createdAt TEXT,
+            category TEXT,
+            created_at TEXT,
             FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE
           )
         ''');
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        // ... Previous migrations (v1->v2, v2->v3) ...
-        if (oldVersion < 2) {
-           final tableInfo = await db.rawQuery('PRAGMA table_info(images)');
-           if (!tableInfo.any((c) => c['name'] == 'analysis_data')) {
-             await db.execute('ALTER TABLE images ADD COLUMN analysis_data TEXT');
-           }
-        }
-
-        if (oldVersion < 3) {
-           await db.execute('''
-            CREATE TABLE IF NOT EXISTS board_categories (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              name TEXT,
-              createdAt TEXT
-            )
-          ''');
-          final tableInfo = await db.rawQuery('PRAGMA table_info(boards)');
-          if (!tableInfo.any((c) => c['name'] == 'category_id')) {
-            await db.execute('ALTER TABLE boards ADD COLUMN category_id INTEGER');
-          }
-        }
-
-        // Migration v3 -> v4 (Comments)
-        if (oldVersion < 4) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS comments (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              image_id TEXT,
-              content TEXT,
-              comment_type TEXT,
-              createdAt TEXT,
-              FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE
-            )
-          ''');
-        }
       },
     );
   }

@@ -1,17 +1,15 @@
-// lib/services/color_analyzer_service.dart
-
 import 'package:flutter/foundation.dart';
 import 'python_service.dart';
 
-class ColorAnalyzerService {
+class LayoutAnalyzerService {
   final PythonService _pythonService = PythonService();
 
   Future<Map<String, dynamic>?> analyze(String imagePath) async {
     try {
-      debugPrint("Starting Color Style Analysis...");
-      return await _pythonService.analyzeColorStyle(imagePath);
+      debugPrint("Starting Layout Analysis...");
+      return await _pythonService.analyzeLayout(imagePath);
     } catch (e) {
-      debugPrint("Color Analysis Exception: $e");
+      debugPrint("Layout Analysis Exception: $e");
       return {'success': false, 'error': e.toString()};
     }
   }

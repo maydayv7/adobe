@@ -2,8 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:adobe/services/theme_service.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
-import 'package:adobe/ui/pages/home_page.dart';
-import 'package:adobe/ui/pages/share_handler_page.dart';
+// import 'package:adobe/ui/pages/home_page.dart';
+// import 'package:adobe/ui/pages/share_handler_page.dart';
+import 'package:adobe/ui/pages/image_analysis_page.dart'; // For Testing
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -88,11 +89,13 @@ class _MyAppState extends State<MyApp> {
   void _navigateToSharePage(String sharedText) {
     // Wait for the frame to render before pushing the route
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      /*
       _navigatorKey.currentState?.push(
         MaterialPageRoute(
           builder: (_) => ShareHandlerPage(sharedText: sharedText),
         ),
       );
+      */
     });
   }
 
@@ -148,7 +151,8 @@ class _MyAppState extends State<MyApp> {
         ),
       ),
 
-      home: const HomePage(),
+      // home: const HomePage(),
+      home: const ImageAnalysisPage(),
     );
   }
 }

@@ -1,13 +1,11 @@
-// lib/services/lighting_service.dart
-
 import 'dart:convert';
 import 'dart:io';
-import 'package:adobe/utils/image_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:onnxruntime/onnxruntime.dart';
-import '../utils/clip_image_processor.dart';
+import 'package:adobe/utils/image_utils.dart';
+import 'package:adobe/utils/clip_image_processor.dart';
 
-class LightingEmbeddingsService {
+class EraEmbeddingsService {
   OrtSession? _session;
   List<List<double>>? _centroids;
   List<String>? _classes;

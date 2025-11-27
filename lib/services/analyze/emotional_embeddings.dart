@@ -1,13 +1,11 @@
-// lib/services/lighting_service.dart
-
 import 'dart:convert';
 import 'dart:io';
-import 'package:adobe/utils/image_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:onnxruntime/onnxruntime.dart';
-import '../utils/clip_image_processor.dart';
+import 'package:adobe/utils/image_utils.dart';
+import 'package:adobe/utils/clip_image_processor.dart';
 
-class EraEmbeddingsService {
+class EmotionalEmbeddingsService {
   OrtSession? _session;
   List<List<double>>? _centroids;
   List<String>? _classes;
@@ -25,8 +23,8 @@ class EraEmbeddingsService {
       _session = OrtSession.fromFile(File(modelPath), sessionOptions);
       sessionOptions.release();
 
-      final jsonStr = await File(jsonPath).readAsString();
-      final jsonData = json.decode(jsonStr);
+      final jsonString = await File(jsonPath).readAsString();
+      final jsonData = json.decode(jsonString);
 
       _classes = List<String>.from(jsonData['classes']);
       _centroids =
@@ -39,8 +37,8 @@ class EraEmbeddingsService {
   }
 
   Future<Map<String, dynamic>?> analyze(String imagePath, {
-    String? modelPath,
-    String? jsonPath,
+    String? modelPath, 
+    String? jsonPath
   }) async {
     // Safety check
     if (modelPath == null || jsonPath == null) return null;
@@ -53,6 +51,7 @@ class EraEmbeddingsService {
 
     try {
       final float32Input = await ClipImageProcessor.preprocess(imagePath);
+      //debugPrint("[EMOTION] Preprocess length: ${float32Input?.length}");
       if (float32Input == null) return null;
 
       // Create Tensor
@@ -64,8 +63,8 @@ class EraEmbeddingsService {
 
       // Run Inference
       // 'image' is the input name for CLIP.
-      outputs = _session!.run(runOptions, {"image": inputOrt}); // <--- UPDATED
-      //debugPrint("[LIGHTING] Output keys: ${outputs.keys}");
+      outputs = _session!.run(runOptions, {"image": inputOrt});
+      //debugPrint("[EMOTION] Output keys: ${outputs.keys}");
 
       if (outputs.isEmpty) throw Exception("No output from model");
 
@@ -87,6 +86,9 @@ class EraEmbeddingsService {
 
       flatten(outputRaw);
 
+      // debugPrint("[EMOTION] Embedding length: ${imgFeat.length}");
+      // debugPrint("[EMOTION] Centroid length: ${_centroids?[0].length}");
+
       // Normalize & Compare
       final normFeat = l2Normalize(imgFeat);
       Map<String, dynamic> scores = {};
@@ -98,7 +100,7 @@ class EraEmbeddingsService {
 
       scores = Map.fromEntries(
         scores.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value)),
+          ..sort((a, b) => b.value.compareTo(a.value))
       );
 
       return {

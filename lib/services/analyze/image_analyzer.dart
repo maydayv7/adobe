@@ -1,5 +1,3 @@
-// lib/services/image_analyzer_service.dart
-
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
@@ -10,13 +8,13 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 // Import analysis services
-import 'layout_analyzer_service.dart';
-import 'color_analyzer_service.dart';
-import 'texture_analyzer_service.dart';
-import 'embedding_analyzer_service.dart';
-import 'emotional_embeddings_service.dart';
-import 'lighting_service.dart';
-import 'era_service.dart';
+import 'layout.dart';
+import 'color.dart';
+import 'texture.dart';
+import 'embedding.dart';
+import 'emotional_embeddings.dart';
+import 'lighting.dart';
+import 'era.dart';
 
 class ImageAnalyzerService {
 
@@ -244,7 +242,6 @@ class ImageAnalyzerService {
   }
 
   static void _logSummary(Map<String, dynamic> result) {
-    // ... (Keep your existing log summary code) ...
     final int total = result['total_time_ms'];
     final Map<String, dynamic> subTasks = result['results'];
 
