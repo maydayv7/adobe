@@ -5,6 +5,7 @@ import '../../data/repos/project_repo.dart';
 import '../../data/repos/image_repo.dart';
 import '../../services/project_service.dart';
 import 'image_analysis_page.dart';
+import 'project_detail_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -154,13 +155,15 @@ class _HomePageState extends State<HomePage> {
     // Update last accessed time
     if (project.id != null) {
       _projectService.openProject(project.id!);
-    }
 
-    // Navigate to project page (placeholder for now)
-    // TODO: Create project detail page
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Opening ${project.title}...')));
+      // Navigate to project detail page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProjectDetailPage(projectId: project.id!),
+        ),
+      ).then((_) => _loadData());
+    }
   }
 
   @override
