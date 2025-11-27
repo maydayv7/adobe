@@ -69,18 +69,22 @@ class _ShareHandlerPageState extends State<ShareHandlerPage> {
         try {
           if (url.contains('instagram.com')) {
             final ids = await _instagramService.downloadInstagramImage(url);
-            if (mounted) setState(() {
+            if (mounted) {
+              setState(() {
                _downloadedImageIds = ids ?? [];
                _isDownloading = false;
                if (_downloadedImageIds.isEmpty) { _hasError = true; _errorMessage = "Insta download failed"; }
             });
+            }
           } else {
             final id = await _downloadService.downloadAndSaveImage(url);
-            if (mounted) setState(() {
+            if (mounted) {
+              setState(() {
                if (id != null) _downloadedImageIds = [id];
                _isDownloading = false;
                if (id == null) { _hasError = true; _errorMessage = "Download failed"; }
             });
+            }
           }
         } catch (e) {
           if (mounted) setState(() { _hasError = true; _errorMessage = "$e"; _isDownloading = false; });
@@ -171,11 +175,13 @@ class _ShareHandlerPageState extends State<ShareHandlerPage> {
       itemCount: _boards.length + 2, 
       itemBuilder: (context, index) {
         if (index == 0) return const Padding(padding: EdgeInsets.all(16), child: Text("Select a Board"));
-        if (index == 1) return ListTile(
+        if (index == 1) {
+          return ListTile(
           leading: const Icon(Icons.add_box, color: Colors.red),
           title: const Text("Create New Board"),
           onTap: _showCreateBoardDialog,
         );
+        }
         
         final board = _boards[index - 2];
         return ListTile(

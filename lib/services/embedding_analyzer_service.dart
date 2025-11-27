@@ -73,8 +73,13 @@ class EmbeddingAnalyzerService {
       final List<double> imgFeat = [];
       
       void flatten(dynamic data) {
-        if (data is num) imgFeat.add(data.toDouble());
-        else if (data is List) for (var item in data) flatten(item);
+        if (data is num) {
+          imgFeat.add(data.toDouble());
+        } else if (data is List) {
+          for (var item in data) {
+            flatten(item);
+          }
+        }
       }
       flatten(rawList);
 

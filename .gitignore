@@ -44,3 +44,4 @@ python_env/
 
 # AI Models
 assets/*.onnx*
+/.vscode/

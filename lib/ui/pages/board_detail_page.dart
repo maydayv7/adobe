@@ -8,7 +8,6 @@ import 'package:adobe/data/models/board_model.dart';
 import 'package:adobe/data/models/image_model.dart';
 import 'package:adobe/data/repos/board_image_repo.dart';
 import 'package:adobe/data/repos/image_repo.dart';
-import 'package:adobe/data/repos/board_repo.dart';
 import 'package:adobe/services/image_service.dart';
 import 'package:adobe/services/theme_service.dart';
 import 'package:adobe/services/image_analyzer_service.dart'; // Master Service
@@ -24,8 +23,7 @@ class BoardDetailPage extends StatefulWidget {
 
 class _BoardDetailPageState extends State<BoardDetailPage> {
   final _boardImageRepo = BoardImageRepository();
-  final _imageRepo = ImageRepository();
-  final _boardRepo = BoardRepository(); 
+  final _imageRepo = ImageRepository(); 
   final _imageService = ImageService(); 
   final _imagePicker = ImagePicker();
   final _uuid = const Uuid();

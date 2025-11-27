@@ -92,8 +92,13 @@ class TextureAnalyzerService {
       final dynamic outputRaw = await outputOrt.asList();
       final List<double> rawOutput = [];
       void flatten(dynamic data) {
-        if (data is num) rawOutput.add(data.toDouble());
-        else if (data is List) for (var item in data) flatten(item);
+        if (data is num) {
+          rawOutput.add(data.toDouble());
+        } else if (data is List) {
+          for (var item in data) {
+            flatten(item);
+          }
+        }
       }
       flatten(outputRaw);
 
