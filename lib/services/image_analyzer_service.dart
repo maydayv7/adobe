@@ -49,6 +49,7 @@ class ImageAnalyzerService {
       copy('style_embeddings.json'),
       copy('emotion_centroids.json'),
       copy('lighting_centroids.json'),
+      copy('era_centroids.json'),
     ]);
 
     return {
@@ -59,6 +60,7 @@ class ImageAnalyzerService {
       'embedding_json': paths[4],
       'emotion_json': paths[5],
       'lighting_json': paths[6],
+      'era_json': paths[7],
     };
   }
 
@@ -192,6 +194,20 @@ class ImageAnalyzerService {
              return res;
           }
         ),
+
+        _runProfiledJob(
+          name: 'Era', imagePath: imagePath, rootToken: token, runInIsolate: true, 
+          assetPaths: assetPaths,
+          task: (path, assets) async {
+             final service = EraEmbeddingsService();
+             final res = await service.analyze(path,
+                modelPath: assets['clip_model'],
+                jsonPath: assets['era_json']
+             );
+             service.dispose();
+             return res;
+          }
+        ),
       ]);
 
       totalSw.stop();
@@ -207,6 +223,7 @@ class ImageAnalyzerService {
           'embedding': results[3],
           'emotions': results[4],
           'lighting': results[5],
+          'era': results[6],
         }
       };
 
@@ -217,6 +234,7 @@ class ImageAnalyzerService {
       print("embedding: ${results[3]} \n\n\n");
       print("emotions: ${results[4]} \n\n\n");
       print("lighting: ${results[5]} \n\n\n");
+      print("era: ${results[6]} \n\n\n");
       return finalResult;
 
     } catch (e) {

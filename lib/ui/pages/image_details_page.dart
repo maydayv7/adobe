@@ -38,7 +38,7 @@ class _ImageDetailPageState extends State<ImageDetailPage> {
     try {
       // 1. Fetch detailed image info (including comments if repo supports it, 
       // or fetch separately if not fully integrated yet)
-      final data = await _imageRepo.getImageDetails(widget.imageId);
+      final data = null; // await _imageRepo.getImageDetails(widget.imageId);
       
       if (data != null) {
         // Parse Image
