@@ -99,6 +99,87 @@ class AnalysisDialog extends StatelessWidget {
                         )).toList(),
                       ),
                     ),
+                  
+                  // 5. Emotional Embeddings
+                  // 5. Emotional Embeddings
+                  if (data['emotions'] != null)
+                    _buildSection(
+                      "Emotional Tone",
+                      Icons.mood,
+                      Colors.redAccent,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+
+                          Text(
+                            data['emotions']['label'] ?? "Unknown",
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+
+                          Wrap(
+                            spacing: 6,
+                            children:
+                                (data['emotions']['top5'] as List? ?? [])
+                                    .map<Widget>(
+                                      (e) => Chip(
+                                        label: Text(
+                                          e['name'],
+                                          style: const TextStyle(fontSize: 10),
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    )
+                                    .toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // 6. Lighting Embeddings
+                  // 6. Lighting Embeddings
+                  if (data['lighting'] != null)
+                    _buildSection(
+                      "Lighting Style",
+                      Icons.wb_sunny,
+                      Colors.amber,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          
+                          Text(
+                            data['lighting']['label'] ?? "Unknown",
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.amber,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+
+                          Wrap(
+                            spacing: 6,
+                            children:
+                                (data['lighting']['top5'] as List? ?? [])
+                                    .map<Widget>(
+                                      (e) => Chip(
+                                        label: Text(
+                                          e['name'],
+                                          style: const TextStyle(fontSize: 10),
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    )
+                                    .toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+
                 ],
               ),
             ),

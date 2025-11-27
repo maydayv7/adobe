@@ -1,11 +1,9 @@
-// lib/services/style_analyzer_service.dart
-
 import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:onnxruntime/onnxruntime.dart';
+import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 import 'package:path_provider/path_provider.dart';
 import '../utils/clip_image_processor.dart';
 
@@ -17,84 +15,89 @@ class EmotionalEmbeddingsService {
   static Future<void> initialize() async {
     if (_session != null) return;
 
-    debugPrint("Initializing AI...");
-
-    // 1. Setup ONNX Environment
-    OrtEnv.instance.init();
-
-    // 2. Load Model from Assets
-    final sessionOptions = OrtSessionOptions();
-    final rawAsset = await rootBundle.load('assets/clip_vitb32_image.onnx');
-    final bytes = rawAsset.buffer.asUint8List();
-
-    // Store temp file to load into ONNX
-    final dir = await getTemporaryDirectory();
-    final modelFile = File('${dir.path}/clip_model.onnx');
-    await modelFile.writeAsBytes(bytes);
-
-    _session = OrtSession.fromFile(modelFile, sessionOptions);
-
-    // 3. Load Embeddings JSON
-    final jsonString = await rootBundle.loadString(
-      'assets/emotion_centroids.json',
-    );
-    final jsonData = json.decode(jsonString);
-
-    _classes = List<String>.from(jsonData['classes']);
-    _centroids =
-        (jsonData['centroids'] as List)
-            .map((e) => List<double>.from(e))
-            .toList();
-
-    debugPrint("Loaded ${_classes!.length} emotions.");
-  }
-
-  static Future<Map<String, dynamic>?> analyzeImage(String imagePath) async {
-    if (_session == null) await initialize();
-
     try {
-      // 1. Preprocess Image
-      final float32Input = await ClipImageProcessor.preprocess(imagePath);
-      if (float32Input == null) return null;
+      debugPrint("Initializing Embeddings (Dino/CLIP)...");
 
-      // 2. Create Tensor [1, 3, 224, 224]
-      final inputTensor = OrtValueTensor.createTensorWithDataList(
-        float32Input,
-        [1, 3, 224, 224],
-      );
+      final rawAsset = await rootBundle.load('assets/clip_image_encoder.onnx');
+      final dir = await getTemporaryDirectory();
+      final modelFile = File('${dir.path}/clip_model.onnx');
 
-      // 3. Run Inference
-      final inputs = {
-        'image': inputTensor,
-      }; // Check input name in Netron.app if 'image' fails (might be 'input')
-      final runOptions = OrtRunOptions();
-      final outputs = _session!.run(runOptions, inputs);
-
-      // 4. Get Embedding [1, 512]
-      // ONNX Runtime usually returns a List<List<double>> for 2D output
-      final rawOutput = outputs[0]?.value as List;
-      // Flatten if necessary, or access [0]
-      List<double> imgFeat =
-          (rawOutput[0] as List).map((e) => e as double).toList();
-
-      // Cleanup
-      inputTensor.release();
-      runOptions.release();
-      outputs.forEach((element) => element?.release());
-
-      // 5. Math: Normalize & Dot Product
-      imgFeat = _l2Normalize(imgFeat);
-
-      List<Map<String, dynamic>> scores = [];
-      for (int i = 0; i < _classes!.length; i++) {
-        double score = _dotProduct(imgFeat, _centroids![i]);
-        scores.add({
-          "name": _classes![i],
-          "score": score * 100.0, // Scale for display
-        });
+      if (!await modelFile.exists()) {
+        await modelFile.writeAsBytes(rawAsset.buffer.asUint8List());
       }
 
-      // 6. Sort & Return
+      // Initialize runtime
+      final ort = OnnxRuntime();
+      _session = await ort.createSession(modelFile.path);
+
+      final jsonString = await rootBundle.loadString(
+        'assets/emotion_centroids.json',
+      );
+      final jsonData = json.decode(jsonString);
+
+      _classes = List<String>.from(jsonData['classes']);
+      _centroids =
+          (jsonData['centroids'] as List)
+              .map((e) => List<double>.from(e))
+              .toList();
+    } catch (e) {
+      debugPrint("Embeddings Init Error: $e");
+    }
+  }
+
+  static Future<Map<String, dynamic>?> analyze(String imagePath) async {
+    if (_session == null) await initialize();
+
+    OrtValue? inputOrt;
+    OrtValue? outputOrt;
+
+    try {
+      final float32Input = await ClipImageProcessor.preprocess(imagePath);
+      //debugPrint("[EMOTION] Preprocess length: ${float32Input?.length}");
+      if (float32Input == null) return null;
+
+      // Create Tensor
+      // Note: ensure ClipImageProcessor returns a flat List<double>
+      inputOrt = await OrtValue.fromList(float32Input, [1, 3, 224, 224]);
+
+      // Run Inference
+      // 'image' is the input name for CLIP. Check your model if it differs (e.g. 'input')
+      final outputs = await _session!.run({"image": inputOrt});
+      //debugPrint("[EMOTION] Output keys: ${outputs.keys}");
+
+      // Get Output
+      outputOrt =
+          outputs['output']; // or outputs['image_features'] depending on model
+      // If outputOrt is null, try iterating outputs.values.first
+      final resultOrt = outputOrt ?? outputs.values.first;
+
+      if (resultOrt == null) throw Exception("No output from model");
+
+      // Flatten Output
+      final List<dynamic> rawList = await resultOrt.asList();
+      final List<double> imgFeat = [];
+
+      void flatten(dynamic data) {
+        if (data is num)
+          imgFeat.add(data.toDouble());
+        else if (data is List)
+          for (var item in data) flatten(item);
+      }
+
+      flatten(rawList);
+
+      // debugPrint("[EMOTION] Embedding length: ${imgFeat.length}");
+      // debugPrint("[EMOTION] Centroid length: ${_centroids?[0].length}");
+
+      // Normalize & Compare
+      final normFeat = _l2Normalize(imgFeat);
+      List<Map<String, dynamic>> scores = [];
+
+      for (int i = 0; i < _classes!.length; i++) {
+        double score = _dotProduct(normFeat, _centroids![i]);
+        scores.add({"name": _classes![i], "score": score * 100.0});
+      }
+
       scores.sort(
         (a, b) => (b['score'] as double).compareTo(a['score'] as double),
       );
@@ -103,28 +106,28 @@ class EmotionalEmbeddingsService {
         "success": true,
         "label": scores.first['name'],
         "top5": scores.take(5).toList(),
-        "scores": {for (var e in scores) e['name']: e['score']},
       };
     } catch (e) {
-      debugPrint("Analysis Error: $e");
+      debugPrint("Embeddings Analysis Error: $e");
       return null;
+    } finally {
+      inputOrt?.dispose();
+      outputOrt?.dispose();
     }
   }
 
-  // --- MATH HELPERS ---
-
   static List<double> _l2Normalize(List<double> vec) {
-    double sum = 0;
-    for (var v in vec) {
-      sum += v * v;
-    }
+    double sum = vec.fold(0, (p, c) => p + c * c);
     double norm = sqrt(sum);
+    if (norm == 0) return vec;
     return vec.map((v) => v / norm).toList();
   }
 
   static double _dotProduct(List<double> a, List<double> b) {
     double sum = 0;
-    for (int i = 0; i < a.length; i++) {
+    // Ensure lengths match to avoid range errors
+    int len = min(a.length, b.length);
+    for (int i = 0; i < len; i++) {
       sum += a[i] * b[i];
     }
     return sum;

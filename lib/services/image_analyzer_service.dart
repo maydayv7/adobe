@@ -15,7 +15,7 @@ class ImageAnalyzerService {
     // 1. Instantiate services
     final layoutService = LayoutAnalyzerService();
     final colorService = ColorAnalyzerService();
-    final textureService = TextureAnalyzerService();
+    final textureService = TextureAnalyzerService();    
     // EmbeddingService is static
 
     try {
@@ -24,7 +24,9 @@ class ImageAnalyzerService {
         layoutService.analyze(imagePath),           // Index 0: Layout
         colorService.analyze(imagePath),            // Index 1: Color
         textureService.analyze(imagePath),          // Index 2: Texture
-        EmbeddingAnalyzerService.analyze(imagePath) // Index 3: Embeddings
+        EmbeddingAnalyzerService.analyze(imagePath), // Index 3: Embeddings
+        EmotionalEmbeddingsService.analyze(imagePath), // Index 4: Emotional Embeddings
+        LightingEmbeddingsService.analyze(imagePath), // Index 5: Lighting Embeddings
       ]);
 
       // 3. Construct Unified Result
@@ -35,6 +37,8 @@ class ImageAnalyzerService {
         'color': results[1],
         'texture': results[2],   // This is a List
         'embedding': results[3],
+        'emotions': results[4],
+        'lighting': results[5],
       };
 
       return combinedResult;
