@@ -8,6 +8,7 @@ import 'texture_analyzer_service.dart';
 import 'embedding_analyzer_service.dart';
 import 'emotional_embeddings_service.dart'; 
 import 'lighting_service.dart';
+import 'era_service.dart';
 
 class ImageAnalyzerService {
   /// Runs all 4 analysis tools in parallel and returns a combined JSON Map.
@@ -27,6 +28,7 @@ class ImageAnalyzerService {
         EmbeddingAnalyzerService.analyze(imagePath), // Index 3: Embeddings
         EmotionalEmbeddingsService.analyze(imagePath), // Index 4: Emotional Embeddings
         LightingEmbeddingsService.analyze(imagePath), // Index 5: Lighting Embeddings
+        EraEmbeddingsService.analyze(imagePath),     // Index 6: Era Embeddings
       ]);
 
       // 3. Construct Unified Result
@@ -39,6 +41,7 @@ class ImageAnalyzerService {
         'embedding': results[3],
         'emotions': results[4],
         'lighting': results[5],
+        'era': results[6],
       };
 
       return combinedResult;
