@@ -42,7 +42,8 @@ flutter:
     - assets/style_embeddings.json
     - assets/emotion_centroids.json
     - assets/lighting_centroids.json
-
+    - assets/era_centroids.json
+    
   fonts:
     - family: GeneralSans
       fonts:
