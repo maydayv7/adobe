@@ -75,9 +75,13 @@ class AppDatabase {
           CREATE TABLE notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             image_id TEXT NOT NULL,
-            content TEXT,
-            category TEXT,
+            content TEXT NOT NULL,
+            category TEXT NOT NULL,
             created_at TEXT,
+            norm_x REAL DEFAULT 0.5,
+            norm_y REAL DEFAULT 0.5,
+            norm_width REAL DEFAULT 0.0,
+            norm_height REAL DEFAULT 0.0,
             FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE
           )
         ''');

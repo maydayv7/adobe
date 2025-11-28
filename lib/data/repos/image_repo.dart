@@ -3,7 +3,6 @@ import '../database.dart';
 import '../models/image_model.dart';
 
 class ImageRepo {
-  
   Future<void> addImage(ImageModel image) async {
     final db = await AppDatabase.db;
     await db.insert('images', image.toMap());
@@ -27,23 +26,49 @@ class ImageRepo {
     return null;
   }
 
+  /// NEW METHOD: Fetches tags for the specific image
+  Future<List<String>> getTagsForImage(dynamic id) async {
+    final db = await AppDatabase.db;
+    final res = await db.query(
+      'images',
+      columns: ['tags'],
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (res.isNotEmpty && res.first['tags'] != null) {
+      try {
+        // Decode the JSON string stored in the DB back to a List<String>
+        final tagsJson = res.first['tags'] as String;
+        if (tagsJson.isEmpty) return [];
+
+        final List<dynamic> decoded = jsonDecode(tagsJson);
+        return decoded.map((e) => e.toString()).toList();
+      } catch (e) {
+        print("Error decoding tags: $e");
+        return [];
+      }
+    }
+    return [];
+  }
+
   Future<void> updateAnalysis(String id, String analysisData) async {
     final db = await AppDatabase.db;
     await db.update(
-      'images', 
-      {'analysis_data': analysisData}, 
-      where: 'id = ?', 
-      whereArgs: [id]
+      'images',
+      {'analysis_data': analysisData},
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 
   Future<void> updateTags(String id, List<String> tags) async {
     final db = await AppDatabase.db;
     await db.update(
-      'images', 
-      {'tags': jsonEncode(tags)}, 
-      where: 'id = ?', 
-      whereArgs: [id]
+      'images',
+      {'tags': jsonEncode(tags)},
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 
@@ -53,12 +78,14 @@ class ImageRepo {
   }
 
   /// Helper for Project Deletion Service
-  Future<List<String>> getAllFilePathsForProjectIds(List<int> projectIds) async {
+  Future<List<String>> getAllFilePathsForProjectIds(
+    List<int> projectIds,
+  ) async {
     if (projectIds.isEmpty) return [];
     final db = await AppDatabase.db;
     final idList = projectIds.join(',');
     final res = await db.rawQuery(
-      'SELECT file_path FROM images WHERE project_id IN ($idList)'
+      'SELECT file_path FROM images WHERE project_id IN ($idList)',
     );
     return res.map((e) => e['file_path'] as String).toList();
   }

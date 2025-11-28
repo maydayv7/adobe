@@ -1,33 +1,61 @@
-// BROKEN
-
 import 'dart:io';
+import 'dart:ui' as ui; // Fixed import
 import 'package:flutter/material.dart';
+
+// --- IMPORTS ---
+import '../../services/image_service.dart';
+import '../../services/note_service.dart';
+import '../../data/models/note_model.dart';
 import '../../data/models/image_model.dart';
-import '../../data/models/comment_model.dart';
-import '../../data/repos/image_repo.dart';
-import '../../data/repos/comment_repo.dart';
-import 'package:intl/intl.dart';
 
-class ImageDetailPage extends StatefulWidget {
+class ImageDetailsPage extends StatefulWidget {
+  final String imagePath;
   final String imageId;
+  final int projectId;
 
-  const ImageDetailPage({super.key, required this.imageId});
+  const ImageDetailsPage({
+    Key? key,
+    required this.imagePath,
+    required this.imageId,
+    required this.projectId,
+  }) : super(key: key);
 
   @override
-  State<ImageDetailPage> createState() => _ImageDetailPageState();
+  State<ImageDetailsPage> createState() => _ImageDetailsPageState();
 }
 
-class _ImageDetailPageState extends State<ImageDetailPage> {
-  final _imageRepo = ImageRepository();
-  final _commentRepo = CommentRepository();
-  
-  ImageModel? _image;
-  List<Comment> _comments = [];
+class _ImageDetailsPageState extends State<ImageDetailsPage> {
+  // Services
+  final NoteService _noteService = NoteService();
+  final ImageService _imageService = ImageService();
+
+  // State
+  ImageModel? _imageModel;
+  List<NoteModel> _notes = [];
+  List<String> _currentTags = [];
   bool _isLoading = true;
-  
-  // Input controllers
-  final _commentController = TextEditingController();
-  CommentType _selectedType = CommentType.layout; // Default type
+  int? _activeNoteId;
+
+  // -- DRAWING STATE --
+  bool _isDrawMode = false;
+  final GlobalKey _imageKey = GlobalKey();
+
+  Offset? _startPos;
+  Offset? _currentPos;
+  Rect? _finalSelectionRect;
+  Size? _imageRenderSize;
+
+  // Master List of Tags
+  final List<String> _allAvailableTags = [
+    'Layout',
+    'Fonts',
+    'Colour',
+    'Textures',
+    'Illustrations',
+    'Composition',
+    'Dark Mode',
+    'Minimal',
+  ];
 
   @override
   void initState() {
@@ -36,350 +64,966 @@ class _ImageDetailPageState extends State<ImageDetailPage> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
     try {
-      // 1. Fetch detailed image info (including comments if repo supports it, 
-      // or fetch separately if not fully integrated yet)
-      final data = null; // await _imageRepo.getImageDetails(widget.imageId);
-      
-      if (data != null) {
-        // Parse Image
-        _image = ImageModel.fromMap(data);
-        
-        // Parse Comments from the joined data
-        if (data['comments'] != null) {
-          final commentsList = data['comments'] as List;
-          _comments = commentsList.map((c) => Comment.fromMap(c)).toList();
-        }
+      final image = await _imageService.getImage(widget.imageId);
+      final notes = await _noteService.getNotesForImage(widget.imageId);
+      final tags = await _imageService.getTags(widget.imageId);
+
+      if (mounted) {
+        setState(() {
+          _imageModel = image;
+          _notes = notes;
+          _currentTags = tags;
+          _isLoading = false;
+        });
       }
     } catch (e) {
       debugPrint("Error loading details: $e");
-    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _addComment() async {
-    if (_commentController.text.trim().isEmpty || _image == null) return;
+  // --- ACTIONS ---
 
-    final newComment = Comment(
-      imageId: _image!.id,
-      content: _commentController.text.trim(),
-      type: _selectedType,
-      createdAt: DateTime.now().toIso8601String(),
-    );
+  Future<void> _removeTag(String tag) async {
+    setState(() {
+      _currentTags.remove(tag);
+    });
+    await _imageService.updateTags(widget.imageId, _currentTags);
+  }
 
-    try {
-      await _commentRepo.addComment(newComment);
-      _commentController.clear();
-      // Refresh data to show new comment
-      await _loadData();
-    } catch (e) {
-      debugPrint("Error adding comment: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to add comment: $e")),
-        );
-      }
+  void _activateDrawMode() {
+    setState(() {
+      _isDrawMode = true;
+      _finalSelectionRect = null;
+      _startPos = null;
+      _currentPos = null;
+    });
+  }
+
+  void _openNotesSheet({int? highlightId}) {
+    setState(() => _activeNoteId = highlightId);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => _NotesListSheet(
+            notes: _notes,
+            highlightId: highlightId,
+            onAddNotePressed: () {
+              Navigator.pop(context);
+              _activateDrawMode();
+            },
+          ),
+    ).whenComplete(() {
+      setState(() => _activeNoteId = null);
+    });
+  }
+
+  // --- DRAWING GESTURES ---
+
+  void _onPanStart(DragStartDetails details) {
+    if (!_isDrawMode) return;
+    setState(() {
+      _startPos = details.localPosition;
+      _currentPos = details.localPosition;
+    });
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    if (!_isDrawMode) return;
+    setState(() {
+      _currentPos = details.localPosition;
+    });
+  }
+
+  void _onPanEnd(DragEndDetails details) {
+    if (!_isDrawMode || _startPos == null || _currentPos == null) return;
+
+    final rect = Rect.fromPoints(_startPos!, _currentPos!);
+    final RenderBox? box =
+        _imageKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null) {
+      _imageRenderSize = box.size;
     }
+
+    _finalSelectionRect = rect;
+
+    setState(() {
+      _isDrawMode = false;
+      _startPos = null;
+      _currentPos = null;
+    });
+
+    _showAddNoteInputDialog();
+  }
+
+  // --- ADD NOTE INPUT DIALOG ---
+  void _showAddNoteInputDialog() {
+    final TextEditingController newNoteController = TextEditingController();
+    String newCategory = 'Typography';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: const EdgeInsets.all(20),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Add Note",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    DropdownButtonFormField<String>(
+                      value: newCategory,
+                      decoration: InputDecoration(
+                        labelText: "Category",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                      ),
+                      items:
+                          [
+                                'Typography',
+                                'Color Palette',
+                                'Layout',
+                                'Design Style',
+                                'General',
+                              ]
+                              .map(
+                                (c) =>
+                                    DropdownMenuItem(value: c, child: Text(c)),
+                              )
+                              .toList(),
+                      onChanged: (v) => newCategory = v!,
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: newNoteController,
+                      autofocus: true,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: "Enter note details...",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () async {
+                          if (newNoteController.text.isNotEmpty &&
+                              _finalSelectionRect != null &&
+                              _imageRenderSize != null) {
+                            final nX =
+                                _finalSelectionRect!.center.dx /
+                                _imageRenderSize!.width;
+                            final nY =
+                                _finalSelectionRect!.center.dy /
+                                _imageRenderSize!.height;
+                            final nW =
+                                _finalSelectionRect!.width /
+                                _imageRenderSize!.width;
+                            final nH =
+                                _finalSelectionRect!.height /
+                                _imageRenderSize!.height;
+
+                            await _noteService.addNote(
+                              widget.imageId,
+                              newNoteController.text.trim(),
+                              newCategory,
+                              normX: nX,
+                              normY: nY,
+                              normWidth: nW,
+                              normHeight: nH,
+                            );
+
+                            final updatedNotes = await _noteService
+                                .getNotesForImage(widget.imageId);
+                            setState(() {
+                              _notes = updatedNotes;
+                            });
+
+                            Navigator.pop(context);
+                          }
+                        },
+                        child: const Text(
+                          "Save Note",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+    );
+  }
+
+  // --- EDIT TAGS DIALOG ---
+  void _openEditTagsDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        List<String> tempTags = List.from(_currentTags);
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text(
+                "Edit Tags",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              content: SingleChildScrollView(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children:
+                      _allAvailableTags.map((tag) {
+                        final isSelected = tempTags.contains(tag);
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              if (isSelected)
+                                tempTags.remove(tag);
+                              else
+                                tempTags.add(tag);
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  isSelected
+                                      ? const Color(0xFFEEF0FF)
+                                      : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color:
+                                    isSelected
+                                        ? const Color(0xFF7C4DFF)
+                                        : Colors.grey[300]!,
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isSelected) ...[
+                                  const Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: Color(0xFF7C4DFF),
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                Text(
+                                  tag,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight:
+                                        isSelected
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                    color:
+                                        isSelected
+                                            ? const Color(0xFF7C4DFF)
+                                            : Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    this.setState(() => _currentTags = tempTags);
+                    await _imageService.updateTags(widget.imageId, tempTags);
+                    Navigator.pop(context);
+                  },
+                  child: const Text(
+                    "Save",
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_image == null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const Center(child: Text("Image not found")),
-      );
-    }
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            size: 20,
+            color: Colors.black,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share_outlined, color: Colors.black),
-            onPressed: () {
-              // Share logic
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_horiz, color: Colors.black),
-            onPressed: () {},
-          ),
-        ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+
+      body:
+          _isLoading
+              ? const Center(
+                child: CircularProgressIndicator(color: Colors.black),
+              )
+              : Column(
                 children: [
-                  // 1. IMAGE DISPLAY
-                  Center(
-                    child: Container(
-                      constraints: const BoxConstraints(maxHeight: 500),
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          )
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // --- 1. IMAGE CONTAINER ---
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 16),
+                            constraints: const BoxConstraints(maxHeight: 500),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  return Stack(
+                                    fit: StackFit.passthrough,
+                                    children: [
+                                      InteractiveViewer(
+                                        panEnabled: !_isDrawMode,
+                                        scaleEnabled: !_isDrawMode,
+                                        child: GestureDetector(
+                                          onPanStart:
+                                              _isDrawMode ? _onPanStart : null,
+                                          onPanUpdate:
+                                              _isDrawMode ? _onPanUpdate : null,
+                                          onPanEnd:
+                                              _isDrawMode ? _onPanEnd : null,
+                                          child: Stack(
+                                            children: [
+                                              Image.file(
+                                                File(widget.imagePath),
+                                                key: _imageKey,
+                                                fit: BoxFit.contain,
+                                                width: double.infinity,
+                                              ),
+
+                                              if (_isDrawMode &&
+                                                  _startPos != null &&
+                                                  _currentPos != null)
+                                                Positioned.fill(
+                                                  child: CustomPaint(
+                                                    painter:
+                                                        SelectionOverlayPainter(
+                                                          rect: Rect.fromPoints(
+                                                            _startPos!,
+                                                            _currentPos!,
+                                                          ),
+                                                        ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
+                                      ..._notes.map((note) {
+                                        final x =
+                                            note.normX * constraints.maxWidth;
+                                        final y =
+                                            note.normY * constraints.maxHeight;
+                                        final isActive =
+                                            note.id == _activeNoteId;
+
+                                        return Positioned(
+                                          left: x - 10,
+                                          top: y - 10,
+                                          child: GestureDetector(
+                                            onTap:
+                                                () => _openNotesSheet(
+                                                  highlightId: note.id,
+                                                ),
+                                            child: Container(
+                                              width: 20,
+                                              height: 20,
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                shape: BoxShape.circle,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withOpacity(0.3),
+                                                    blurRadius: 4,
+                                                    offset: const Offset(0, 1),
+                                                  ),
+                                                ],
+                                                border:
+                                                    isActive
+                                                        ? Border.all(
+                                                          color: const Color(
+                                                            0xFF7C4DFF,
+                                                          ),
+                                                          width: 3,
+                                                        )
+                                                        : null,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+
+                                      // Notes Button
+                                      Positioned(
+                                        bottom: 12,
+                                        right: 12,
+                                        child: ElevatedButton(
+                                          onPressed: () => _openNotesSheet(),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.white,
+                                            foregroundColor: Colors.black,
+                                            elevation: 4,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 12,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: const [
+                                              Text(
+                                                "Notes",
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Icon(
+                                                Icons.assignment_outlined,
+                                                size: 18,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
+                                      if (_isDrawMode && _startPos == null)
+                                        Positioned(
+                                          top: 20,
+                                          left: 0,
+                                          right: 0,
+                                          child: Center(
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 8,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black87,
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                              ),
+                                              child: const Text(
+                                                "Drag to add note",
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // --- 2. INFO SECTION ---
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _imageModel?.name ?? "Untitled Image",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+
+                                const SizedBox(height: 24),
+
+                                // Tags Box
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF9F9F9),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Colors.grey[200]!,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text(
+                                            "Tags",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                          GestureDetector(
+                                            onTap: _openEditTagsDialog,
+                                            child: const Icon(
+                                              Icons.edit_outlined,
+                                              size: 18,
+                                              color: Colors.black54,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Divider(
+                                        height: 1,
+                                        color: Colors.grey[300],
+                                      ),
+                                      const SizedBox(height: 16),
+
+                                      // Main View: Only show selected tags
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child:
+                                            _currentTags.isEmpty
+                                                ? const Text(
+                                                  "No tags yet.",
+                                                  style: TextStyle(
+                                                    color: Colors.grey,
+                                                  ),
+                                                )
+                                                : Wrap(
+                                                  spacing: 8,
+                                                  runSpacing: 8,
+                                                  children:
+                                                      _currentTags.map((tag) {
+                                                        // Style as "Selected" (Purple with X)
+                                                        return GestureDetector(
+                                                          onTap:
+                                                              () => _removeTag(
+                                                                tag,
+                                                              ),
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets.symmetric(
+                                                                  horizontal:
+                                                                      12,
+                                                                  vertical: 6,
+                                                                ),
+                                                            decoration: BoxDecoration(
+                                                              color:
+                                                                  const Color(
+                                                                    0xFFEEF0FF,
+                                                                  ),
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    20,
+                                                                  ),
+                                                              border: Border.all(
+                                                                color:
+                                                                    const Color(
+                                                                      0xFF7C4DFF,
+                                                                    ),
+                                                                width: 1,
+                                                              ),
+                                                            ),
+                                                            child: Row(
+                                                              mainAxisSize:
+                                                                  MainAxisSize
+                                                                      .min,
+                                                              children: [
+                                                                Text(
+                                                                  tag,
+                                                                  style: const TextStyle(
+                                                                    fontSize:
+                                                                        13,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w500,
+                                                                    color: Color(
+                                                                      0xFF7C4DFF,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(
+                                                                  width: 4,
+                                                                ),
+                                                                const Icon(
+                                                                  Icons.close,
+                                                                  size: 14,
+                                                                  color: Color(
+                                                                    0xFF7C4DFF,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }).toList(),
+                                                ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 40),
                         ],
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: Image.file(
-                          File(_image!.filePath),
-                          fit: BoxFit.contain,
-                          errorBuilder: (c, e, s) => Container(
-                            height: 300,
-                            color: Colors.grey[200],
-                            child: const Icon(Icons.broken_image, size: 50, color: Colors.grey),
-                          ),
-                        ),
-                      ),
                     ),
                   ),
 
-                  const SizedBox(height: 16),
-
-                  // 2. INFO (Name & Link)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _image!.name ?? "Untitled Image",
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'GeneralSans',
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "https://www.adobe.com/project/...", // Placeholder or real link if you have it
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                            decoration: TextDecoration.underline,
-                            fontFamily: 'GeneralSans',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // 3. COMMENTS SECTION
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      children: [
-                        const Text(
-                          "Comments",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'GeneralSans',
-                          ),
-                        ),
-                        const Spacer(),
-                        // Analysis / Tag icons
-                        const Icon(Icons.local_offer_outlined, size: 20, color: Colors.black),
-                        const SizedBox(width: 12),
-                        const Icon(Icons.fullscreen, size: 24, color: Colors.black),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  if (_comments.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(20.0),
-                      child: Center(
-                        child: Text(
-                          "No comments yet. Add one below!",
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ),
-                    )
-                  else
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: _comments.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 16),
-                      itemBuilder: (context, index) {
-                        return _buildCommentItem(_comments[index]);
-                      },
-                    ),
-                    
-                  const SizedBox(height: 100), // Space for bottom sheet
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-      // 4. ADD COMMENT INPUT
-      bottomSheet: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  // Type Selector (Dropdown or similar)
+                  // --- 3. BOTTOM NAVIGATION ---
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
+                      border: Border(top: BorderSide(color: Colors.grey[200]!)),
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<CommentType>(
-                        value: _selectedType,
-                        icon: const Icon(Icons.arrow_drop_down),
-                        items: CommentType.values.map((type) {
-                          return DropdownMenuItem(
-                            value: type,
-                            child: Text(
-                              type.name.toUpperCase(),
-                              style: const TextStyle(fontSize: 12, fontFamily: 'GeneralSans'),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => _selectedType = val);
-                        },
+                    child: BottomNavigationBar(
+                      backgroundColor: Colors.white,
+                      elevation: 0,
+                      selectedItemColor: Colors.black,
+                      unselectedItemColor: Colors.grey,
+                      selectedLabelStyle: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
                       ),
+                      unselectedLabelStyle: const TextStyle(fontSize: 11),
+                      type: BottomNavigationBarType.fixed,
+                      items: const [
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.grid_view),
+                          label: 'Moodboard',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.auto_awesome_mosaic),
+                          label: 'Stylesheet',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.description_outlined),
+                          label: 'Files',
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Text Input
-                  Expanded(
-                    child: TextField(
-                      controller: _commentController,
-                      decoration: const InputDecoration(
-                        hintText: "Add a comment...",
-                        border: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                  // Send Button
-                  IconButton(
-                    icon: const Icon(Icons.send, color: Colors.blue),
-                    onPressed: _addComment,
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
-      ),
     );
   }
+}
 
-  Widget _buildCommentItem(Comment comment) {
-    final date = DateTime.tryParse(comment.createdAt);
-    final timeStr = date != null ? DateFormat.jm().format(date) : "";
+// --- NOTES LIST SHEET ---
+class _NotesListSheet extends StatefulWidget {
+  final List<NoteModel> notes;
+  final int? highlightId;
+  final VoidCallback onAddNotePressed;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Vertical Line indicator
-        Container(
-          width: 4,
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.black87,
-            borderRadius: BorderRadius.circular(2),
+  const _NotesListSheet({
+    Key? key,
+    required this.notes,
+    this.highlightId,
+    required this.onAddNotePressed,
+  }) : super(key: key);
+
+  @override
+  State<_NotesListSheet> createState() => _NotesListSheetState();
+}
+
+class _NotesListSheetState extends State<_NotesListSheet> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.highlightId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final index = widget.notes.indexWhere(
+          (n) => n.id == widget.highlightId,
+        );
+        if (index != -1 && _scrollController.hasClients) {
+          _scrollController.animateTo(
+            index * 80.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.5,
+      minChildSize: 0.3,
+      maxChildSize: 0.85,
+      builder: (_, controller) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  // Comment Type Tag (Pill)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      comment.type.name, // e.g. "Layout", "Colour"
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'GeneralSans',
-                      ),
-                    ),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  const SizedBox(width: 8),
-                  // Time
-                  Text(
-                    timeStr,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[400],
-                      fontFamily: 'GeneralSans',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                comment.content,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.black87,
-                  height: 1.4,
-                  fontFamily: 'GeneralSans',
                 ),
               ),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Notes (${widget.notes.length})",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(),
+
+              Expanded(
+                child: ListView.builder(
+                  controller: controller,
+                  itemCount: widget.notes.length,
+                  itemBuilder: (context, index) {
+                    final note = widget.notes[index];
+                    final isHighlighted = note.id == widget.highlightId;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color:
+                            isHighlighted
+                                ? const Color(0xFFF3F0FF)
+                                : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color:
+                              isHighlighted
+                                  ? const Color(0xFF7C4DFF)
+                                  : Colors.grey[200]!,
+                          width: isHighlighted ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF0FF),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                note.category,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF7C4DFF),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            note.content,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: Colors.black87,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // --- ADD NOTE BUTTON (BOTTOM OF SHEET) ---
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton.icon(
+                  onPressed: widget.onAddNotePressed,
+                  icon: const Icon(Icons.add),
+                  label: const Text("Add Note"),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
             ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
+}
+
+class SelectionOverlayPainter extends CustomPainter {
+  final Rect rect;
+  SelectionOverlayPainter({required this.rect});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Path backgroundPath =
+        Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final Path holePath = Path()..addRect(rect);
+    final Path overlayPath = Path.combine(
+      ui.PathOperation.difference,
+      backgroundPath,
+      holePath,
+    );
+
+    canvas.drawPath(overlayPath, Paint()..color = Colors.black54);
+
+    final Paint borderPaint =
+        Paint()
+          ..color = const Color(0xFF448AFF)
+          ..strokeWidth = 2.0
+          ..style = PaintingStyle.stroke;
+    double dashWidth = 6;
+    double dashSpace = 4;
+    Path borderPath = Path()..addRect(rect);
+    for (ui.PathMetric pathMetric in borderPath.computeMetrics()) {
+      double distance = 0.0;
+      while (distance < pathMetric.length) {
+        canvas.drawPath(
+          pathMetric.extractPath(distance, distance + dashWidth),
+          borderPaint,
+        );
+        distance += (dashWidth + dashSpace);
+      }
+    }
+
+    final Paint dotPaint =
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.fill;
+    canvas.drawCircle(
+      rect.center,
+      8,
+      Paint()
+        ..color = Colors.black26
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+    canvas.drawCircle(rect.center, 6, dotPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant SelectionOverlayPainter oldDelegate) =>
+      rect != oldDelegate.rect;
 }
