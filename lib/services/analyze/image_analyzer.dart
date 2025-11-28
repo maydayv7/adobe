@@ -13,6 +13,7 @@ import 'color.dart';
 import 'texture.dart';
 import 'embedding.dart';
 import 'layout.dart';
+import 'font.dart';
 
 class ImageAnalyzerService {
 
@@ -44,6 +45,8 @@ class ImageAnalyzerService {
       copy('emotion_centroids.json'),
       copy('lighting_centroids.json'),
       copy('era_centroids.json'),
+      copy('fannet.onnx'),
+      copy('font_database.json'),
     ]);
 
     return {
@@ -55,6 +58,8 @@ class ImageAnalyzerService {
       'emotion_json': paths[5],
       'lighting_json': paths[6],
       'era_json': paths[7],
+      'fannet_model': paths[8],
+      'font_json': paths[9],
     };
   }
 
@@ -130,6 +135,20 @@ class ImageAnalyzerService {
           name: 'Color', imagePath: imagePath, rootToken: token, runInIsolate: false, 
           assetPaths: assetPaths,
           task: (path, _) => ColorAnalyzerService().analyze(path)
+        ),
+
+        _runProfiledJob(
+          name: 'Font', imagePath: imagePath, rootToken: token, runInIsolate: false, 
+          assetPaths: assetPaths,
+          task: (path, assets) async {
+             final service = FontIdentifierService();
+             final res = await service.analyze(path, 
+                modelPath: assets['fannet_model'], 
+                jsonPath: assets['font_json']
+             );
+             service.dispose();
+             return res;
+          }
         ),
         
         // --- GROUP B: PARALLEL (ONNX FFI) ---
@@ -217,11 +236,12 @@ class ImageAnalyzerService {
         'results': {
           'Layout': results[0]['execution_time'],
           'Color': results[1]['execution_time'],
-          'Texture': results[2]['execution_time'],
-          'Style': results[3]['execution_time'],
-          'Emotions': results[4]['execution_time'],
-          'Lighting': results[5]['execution_time'],
-          'Era': results[6]['execution_time'],
+          'Font': results[2]['execution_time'],
+          'Texture': results[3]['execution_time'],
+          'Style': results[4]['execution_time'],
+          'Emotions': results[5]['execution_time'],
+          'Lighting': results[6]['execution_time'],
+          'Era': results[7]['execution_time'],
         }
       };
       _logSummary(logResult);
@@ -231,13 +251,14 @@ class ImageAnalyzerService {
         'data': {
           'filename': p.basename(imagePath),
           'results': {
-            'Style': {"scores": results[3]['scores']},
-            'Texture': {"scores": results[2]['scores']},
-            'Lighting': {"scores": results[5]['scores']},
-            'Colour Palette': {"scores": results[1]['scores']},
-            'Emotions': {"scores": results[4]['scores']},
-            'Era': {"scores": results[6]['scores']},
-            'Layout': {"scores": results[0]['scores']}
+            'Layout': {"scores": results[0]['data']['scores']},
+            'Colour Palette': {"scores": results[1]['data']['scores']},
+            'Font': {"scores": results[2]['data']['scores']},
+            'Texture': {"scores": results[3]['data']['scores']},
+            'Style': {"scores": results[4]['data']['scores']},
+            'Emotions': {"scores": results[5]['data']['scores']},
+            'Lighting': {"scores": results[6]['data']['scores']},
+            'Era': {"scores": results[7]['data']['scores']},
           }
         },
         'error': null,
