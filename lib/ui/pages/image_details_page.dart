@@ -47,12 +47,12 @@ class _ImageDetailsPageState extends State<ImageDetailsPage> {
 
   // Master List of Tags
   final List<String> _allAvailableTags = [
-    'Layout',
     'Fonts',
-    'Colour',
+    'Colours',
+    'Everything!',
+    'Compositions',
     'Textures',
-    'Illustrations',
-    'Composition',
+    'Layout',
     'Dark Mode',
     'Minimal',
   ];
@@ -759,9 +759,6 @@ class _ImageDetailsPageState extends State<ImageDetailsPage> {
                       ),
                     ),
                   ),
-
-                  
-                  
                 ],
               ),
     );
