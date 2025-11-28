@@ -43,6 +43,8 @@ flutter:
     - assets/emotion_centroids.json
     - assets/lighting_centroids.json
     - assets/era_centroids.json
+    - assets/font_database.json
+    - assets/fannet.onnx
 
   fonts:
     - family: GeneralSans
