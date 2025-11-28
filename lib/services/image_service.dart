@@ -11,45 +11,54 @@ class ImageService {
   final ImageRepo _repo = ImageRepo();
   final Uuid _uuid = const Uuid();
 
-  Future<void> saveImage(File file, int projectId) async {
-    await saveImages([file], projectId);
-  }
-
-  Future<void> saveImages(List<File> files, int projectId) async {
+  /// Saves a single image and returns its ID.
+  /// This return type (Future<String>) is REQUIRED for ImageSavePage.
+  Future<String> saveImage(File file, int projectId) async {
     // 1. Prepare Directory
     final dir = await getApplicationDocumentsDirectory();
     final folder = Directory("${dir.path}/images");
     if (!await folder.exists()) await folder.create(recursive: true);
 
+    // 2. Generate ID and Path
+    final String id = _uuid.v4();
+    String ext = "jpg"; // Default
+    try {
+      if (file.path.contains('.')) {
+        ext = file.path.split('.').last;
+      }
+    } catch (_) {}
+
+    final String newPath = "${folder.path}/$id.$ext";
+    await file.copy(newPath);
+
+    // 3. Create & Save Model
+    final image = ImageModel(
+      id: id,
+      projectId: projectId,
+      filePath: newPath,
+      name: file.path.split('/').last,
+      createdAt: DateTime.now(),
+      tags: [],
+    );
+
+    await _repo.addImage(image);
+
+    // 4. Run Analysis in Background
+    _analyzeInBackground(id, newPath);
+
+    // 5. RETURN THE ID (Critical fix)
+    return id;
+  }
+
+  /// Bulk save method (optional, but good helper)
+  Future<List<String>> saveImages(List<File> files, int projectId) async {
+    List<String> ids = [];
     for (var file in files) {
-      final String id = _uuid.v4();
-      
-      // 2. Determine Extension & Copy File to Permanent Storage
-      String ext = "jpg"; // Default
-      try {
-        if (file.path.contains('.')) {
-          ext = file.path.split('.').last;
-        }
-      } catch (_) {}
-      
-      final String newPath = "${folder.path}/$id.$ext";
-      await file.copy(newPath);
-
-      // 3. Create & Save Model
-      final image = ImageModel(
-        id: id,
-        projectId: projectId,
-        filePath: newPath,
-        name: file.path.split('/').last,
-        createdAt: DateTime.now(),
-        tags: [],
-      );
-
-      await _repo.addImage(image);
-
-      // 4. Run Analysis in Background
-      _analyzeInBackground(id, newPath);
+      // Reuse the single save logic to avoid code duplication
+      String id = await saveImage(file, projectId);
+      ids.add(id);
     }
+    return ids;
   }
 
   Future<void> _analyzeInBackground(String imageId, String filePath) async {
@@ -74,8 +83,17 @@ class ImageService {
     await _repo.updateAnalysis(id, jsonString);
   }
 
-  Future<void> updateTags(String id, List<String> tags) async {
-    await _repo.updateTags(id, tags);
+  Future<ImageModel?> getImage(String id) async {
+    return await _repo.getById(id);
+  }
+
+  Future<List<String>> getTags(String imageId) async {
+    return await _repo.getTagsForImage(imageId);
+  }
+
+  
+  Future<void> updateTags(String imageId, List<String> newTags) async {
+    await _repo.updateTags(imageId, newTags);
   }
 
   Future<void> deleteImage(String id) async {

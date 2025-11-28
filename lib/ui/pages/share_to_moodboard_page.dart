@@ -1,10 +1,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+
+// Models & Repos
 import '../../data/models/project_model.dart';
 import '../../data/repos/project_repo.dart';
+
+// Services
 import '../../services/project_service.dart';
-import '../../services/image_service.dart';
+
+// Pages
+import 'image_save_page.dart';
 
 // Helper model for UI rendering
 class ProjectItemViewModel {
@@ -19,7 +25,9 @@ class ProjectItemViewModel {
 }
 
 class ShareToMoodboardPage extends StatefulWidget {
+  // CHANGED: Now accepts a List of files instead of a single file
   final List<File> imageFiles;
+
   const ShareToMoodboardPage({super.key, required this.imageFiles});
 
   @override
@@ -29,14 +37,12 @@ class ShareToMoodboardPage extends StatefulWidget {
 class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
   final ProjectRepo _projectRepo = ProjectRepo();
   final ProjectService _projectService = ProjectService();
-  final ImageService _imageService = ImageService();
 
   List<ProjectItemViewModel> _recentViewModels = [];
   List<ProjectItemViewModel> _allViewModels = [];
   List<ProjectItemViewModel> _filteredViewModels = [];
 
   bool _isLoading = true;
-  bool _isSaving = false;
   String _searchQuery = "";
   final TextEditingController _searchController = TextEditingController();
 
@@ -46,24 +52,30 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    try {
-      final recentItems = await _projectRepo.getRecentProjectsAndEvents();
-      final allItems = await _projectRepo.getAllProjectsAndEvents();
-
-      _recentViewModels = await _buildViewModels(recentItems.take(3).toList());
-      _allViewModels = await _buildViewModels(allItems);
-      _filteredViewModels = _allViewModels;
-
-      if (mounted) setState(() => _isLoading = false);
-    } catch (e) {
-      debugPrint("Error loading projects: $e");
-      if (mounted) setState(() => _isLoading = false);
-    }
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
-  Future<List<ProjectItemViewModel>> _buildViewModels(List<ProjectModel> items) async {
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+
+    // Fetch raw data
+    final recentItems = await _projectRepo.getRecentProjectsAndEvents();
+    final allItems = await _projectRepo.getAllProjectsAndEvents();
+
+    // Build view models with parent titles
+    _recentViewModels = await _buildViewModels(recentItems.take(3).toList());
+    _allViewModels = await _buildViewModels(allItems);
+    _filteredViewModels = _allViewModels;
+
+    setState(() => _isLoading = false);
+  }
+
+  Future<List<ProjectItemViewModel>> _buildViewModels(
+    List<ProjectModel> items,
+  ) async {
     final List<ProjectItemViewModel> viewModels = [];
     for (var item in items) {
       String? parentTitle;
@@ -71,7 +83,9 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
         final parent = await _projectRepo.getProjectById(item.parentId!);
         parentTitle = parent?.title;
       }
-      viewModels.add(ProjectItemViewModel(item: item, parentTitle: parentTitle));
+      viewModels.add(
+        ProjectItemViewModel(item: item, parentTitle: parentTitle),
+      );
     }
     return viewModels;
   }
@@ -82,11 +96,16 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
       if (query.isEmpty) {
         _filteredViewModels = _allViewModels;
       } else {
-        _filteredViewModels = _allViewModels.where((vm) {
-          final titleMatches = vm.title.toLowerCase().contains(query.toLowerCase());
-          final parentMatches = vm.parentTitle?.toLowerCase().contains(query.toLowerCase()) ?? false;
-          return titleMatches || parentMatches;
-        }).toList();
+        _filteredViewModels =
+            _allViewModels.where((vm) {
+              final titleMatches = vm.title.toLowerCase().contains(
+                query.toLowerCase(),
+              );
+              final parentMatches =
+                  vm.parentTitle?.toLowerCase().contains(query.toLowerCase()) ??
+                  false;
+              return titleMatches || parentMatches;
+            }).toList();
       }
     });
   }
@@ -95,61 +114,56 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
     final controller = TextEditingController();
     final String? title = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("New Project"),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: "Project Title"),
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text("Create"),
+      builder:
+          (context) => AlertDialog(
+            title: const Text("New Project"),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(hintText: "Project Title"),
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, controller.text.trim()),
+                child: const Text("Create"),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (title != null && title.isNotEmpty) {
+      // Create the project first
       final newId = await _projectService.createProject(title);
-      await _saveAndExit(newId);
+      _navigateToSavePage(newId, title);
     }
   }
 
-  Future<void> _saveAndExit(int projectId) async {
-    setState(() => _isSaving = true);
+  void _navigateToSavePage(int projectId, String projectName) {
+    // 1. Update "Recently Used" status
+    _projectService.openProject(projectId);
 
-    try {
-      // 1. Save Images to Moodboard
-      await _imageService.saveImages(widget.imageFiles, projectId);
+    // 2. Reset Share Intent
+    ReceiveSharingIntent.instance.reset();
 
-      // 2. Update "Recently Used" status
-      await _projectService.openProject(projectId);
-
-      // 3. Reset Share Intent
-      ReceiveSharingIntent.instance.reset();
-
-      if (mounted) {
-        final count = widget.imageFiles.length;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Saved $count image${count > 1 ? 's' : ''} to Moodboard!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.popUntil(context, (route) => route.isFirst);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error saving: $e"), backgroundColor: Colors.red),
-        );
-        setState(() => _isSaving = false);
-      }
-    }
+    // 3. Navigate to ImageSavePage with the LIST of paths
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => ImageSavePage(
+              // Convert List<File> to List<String> paths
+              imagePaths: widget.imageFiles.map((f) => f.path).toList(),
+              projectId: projectId,
+              projectName: projectName,
+              isFromShare: true, // This enables SystemNavigator.pop() on finish
+            ),
+      ),
+    );
   }
 
   @override
@@ -163,7 +177,10 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text("Select Moodboard", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text(
+          "MoodBoards",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.add, color: Colors.black, size: 28),
@@ -173,7 +190,7 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
         ],
       ),
       body:
-          _isLoading || _isSaving
+          _isLoading
               ? const Center(child: CircularProgressIndicator())
               : Column(
                 children: [
@@ -295,7 +312,7 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
   // --- Widget for Recent Items (Horizontal List) ---
   Widget _buildRecentItem(ProjectItemViewModel vm) {
     return InkWell(
-      onTap: () => _saveAndExit(vm.id),
+      onTap: () => _navigateToSavePage(vm.id, vm.title),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         width: 220,
@@ -357,7 +374,7 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
   // --- Widget for All Items (Vertical List) ---
   Widget _buildAllItem(ProjectItemViewModel vm) {
     return ListTile(
-      onTap: () => _saveAndExit(vm.id),
+      onTap: () => _navigateToSavePage(vm.id, vm.title),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Container(
         width: 50,
