@@ -23,6 +23,7 @@ dependencies:
   image: ^4.5.4
   onnxruntime: ^1.4.1
   intl: ^0.20.2
+  google_mlkit_text_recognition: ^0.15.0
 
 dev_dependencies:
   flutter_test:
@@ -43,6 +44,8 @@ flutter:
     - assets/emotion_centroids.json
     - assets/lighting_centroids.json
     - assets/era_centroids.json
+    - assets/font_database.json
+    - assets/fannet.onnx
 
   fonts:
     - family: GeneralSans
