@@ -9,7 +9,7 @@ import 'models/note_model.dart';
 
 class AppDatabase {
   static Database? _db;
-  static const String _dbName = 'database_v2.db';
+  static const String _dbName = 'database_v3.db';
 
   static Future<Database> get db async {
     if (_db != null) return _db!;
