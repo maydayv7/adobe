@@ -29,7 +29,6 @@ class ProjectItemViewModel {
 
 class ProjectGroup {
   final ProjectModel project;
-  // Holds ViewModels so we have cover paths for events too
   final List<ProjectItemViewModel> events;
   final String? coverPath;
   bool isExpanded;
@@ -78,7 +77,6 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
     super.dispose();
   }
 
-  /// Helper to fetch the latest image for a project to use as cover
   Future<String?> _getProjectCover(int projectId) async {
     try {
       final images = await _imageRepo.getImages(projectId);
@@ -122,10 +120,7 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
     // 3. Build Grouped Projects
     final List<ProjectGroup> groups = [];
     for (final p in allProjects) {
-      // Fetch Events
       final rawEvents = await _projectRepo.getEvents(p.id!);
-
-      // Convert Events to ViewModels (to get their covers)
       final List<ProjectItemViewModel> eventVMs = [];
       for (final e in rawEvents) {
         final eCover = await _getProjectCover(e.id!);
@@ -214,7 +209,11 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
     }
   }
 
-  void _navigateToSavePage(int projectId, String projectName, {String? parentProjectName}) {
+  void _navigateToSavePage(
+    int projectId,
+    String projectName, {
+    String? parentProjectName,
+  }) {
     _projectService.openProject(projectId);
     ReceiveSharingIntent.instance.reset();
 
@@ -246,7 +245,13 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
         ),
         title: const Text(
           "MoodBoards",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Color(0xFF27272A),
+            fontFamily: 'GeneralSans',
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+            height: 1.2,
+          ),
         ),
         actions: [
           IconButton(
@@ -261,40 +266,60 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
               ? const Center(child: CircularProgressIndicator())
               : Column(
                 children: [
-                  // Search Bar
+                  // --- Search Bar ---
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: _filterProjects,
-                      decoration: InputDecoration(
-                        hintText: "Search",
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: Colors.grey,
+                    child: SizedBox(
+                      height: 42,
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: _filterProjects,
+                        style: const TextStyle(
+                          fontFamily: "GeneralSans",
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF71717B),
+                          height: 1.4,
                         ),
-                        filled: true,
-                        fillColor: Colors.grey[100],
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                        decoration: InputDecoration(
+                          hintText: "Search",
+                          hintStyle: const TextStyle(
+                            fontFamily: "GeneralSans",
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xFF71717B),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            size: 20,
+                            color: Color(0xFF9F9FA9),
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFE4E4E7),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 12,
+                            horizontal: 16,
+                          ),
+                          suffixIcon:
+                              _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                    icon: const Icon(
+                                      Icons.clear,
+                                      size: 20,
+                                      color: Color(0xFF9F9FA9),
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      _filterProjects("");
+                                    },
+                                  )
+                                  : null,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 14,
-                        ),
-                        suffixIcon:
-                            _searchQuery.isNotEmpty
-                                ? IconButton(
-                                  icon: const Icon(
-                                    Icons.clear,
-                                    color: Colors.grey,
-                                  ),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    _filterProjects("");
-                                  },
-                                )
-                                : null,
                       ),
                     ),
                   ),
@@ -309,21 +334,23 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
                               _recentViewModels.isNotEmpty) ...[
                             const Padding(
                               padding: EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
+                                horizontal: 20,
+                                vertical: 8,
                               ),
                               child: Text(
                                 "Recent Projects/Events",
                                 style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.grey,
-                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'GeneralSans',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                  color: Color(0xFF27272A),
+                                  height: 1.43,
                                 ),
                               ),
                             ),
                             Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                                horizontal: 20,
                               ),
                               child: Column(
                                 children:
@@ -338,22 +365,24 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
                           // --- ALL PROJECTS SECTION ---
                           Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
+                              horizontal: 20,
+                              vertical: 8,
                             ),
                             child: Text(
                               _searchQuery.isEmpty
                                   ? "All Projects/Events"
                                   : "Search Results",
                               style: const TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w500,
+                                fontFamily: 'GeneralSans',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: Color(0xFF27272A),
+                                height: 1.43,
                               ),
                             ),
                           ),
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
                             child: ListView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
@@ -364,7 +393,7 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
                                   ),
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 40),
                         ],
                       ),
                     ),
@@ -378,33 +407,35 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
 
   Widget _buildRecentItem(ProjectItemViewModel vm) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8), // Reduced spacing
       child: InkWell(
-        onTap: () => _navigateToSavePage(vm.id, vm.title, parentProjectName: vm.parentTitle),
+        onTap:
+            () => _navigateToSavePage(
+              vm.id,
+              vm.title,
+              parentProjectName: vm.parentTitle,
+            ),
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          // padding: 4px 0 4px 4px
+          padding: const EdgeInsets.fromLTRB(4, 4, 0, 4),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: Colors.white, // #FAFAFA
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFE4E4E7),
+              width: 1,
+            ), // #E4E4E7
           ),
           child: Row(
             children: [
               // Cover Image
               Container(
-                width: 60,
-                height: 60,
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFFFAFAFA),
+                  borderRadius: BorderRadius.circular(8),
                   image:
                       vm.coverPath != null
                           ? DecorationImage(
@@ -415,10 +446,10 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
                 ),
                 child:
                     vm.coverPath == null
-                        ? Icon(Icons.image, color: Colors.grey[400], size: 30)
+                        ? Icon(Icons.image, color: Colors.grey[400], size: 28)
                         : null,
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 10), // 10px Gap
               // Text Content
               Expanded(
                 child: Column(
@@ -426,19 +457,29 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     if (vm.isEvent && vm.parentTitle != null)
-                      Text(
-                        vm.parentTitle!,
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text(
+                          vm.parentTitle!,
+                          style: const TextStyle(
+                            fontFamily: 'GeneralSans',
+                            fontSize: 12,
+                            color: Color(0xFF27272A),
+                            fontWeight: FontWeight.w400,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     Text(
                       vm.title,
                       style: const TextStyle(
+                        fontFamily: 'GeneralSans',
                         fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF27272A), // Same black as event
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
@@ -451,33 +492,37 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
     );
   }
 
-  // UPDATED: Main tap saves to Project, Arrow toggles Events
   Widget _buildProjectGroup(ProjectGroup g) {
     final project = g.project;
     final hasEvents = g.events.isNotEmpty;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12), // Separate cards
+      margin: const EdgeInsets.only(bottom: 8),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200), // FULL BORDER
+        borderRadius: BorderRadius.circular(12), // Match recent radius
+        border: Border.all(
+          color: const Color(0xFFE4E4E7),
+        ), // Match recent border
       ),
       child: Column(
         children: [
-          // PARENT PROJECT TILE
+          // Parent Project
           ListTile(
-            // ACTION 1: Tap main area -> Save to Project
-            onTap: () => _navigateToSavePage(project.id!, project.title),
-
+            onTap:
+                () =>
+                    hasEvents
+                        ? setState(() => g.isExpanded = !g.isExpanded)
+                        : _navigateToSavePage(project.id!, project.title),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
-              vertical: 8,
-            ),
+              vertical: 4,
+            ), // Reduced vertical padding
+            visualDensity: VisualDensity.compact, // Reduce height
             leading: Container(
-              width: 50,
-              height: 50,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 color: Colors.grey[100],
                 borderRadius: BorderRadius.circular(12),
@@ -496,10 +541,13 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
             ),
             title: Text(
               project.title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontFamily: 'GeneralSans',
+                fontSize: 16,
+                fontWeight: FontWeight.w500, // Matched with Recent
+                color: Color(0xFF27272A),
+              ),
             ),
-
-            // ACTION 2: Tap Dropdown -> Toggle List
             trailing:
                 hasEvents
                     ? IconButton(
@@ -516,30 +564,30 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
                     : null,
           ),
 
-          // CHILDREN (EVENTS) with GREY BACKGROUND
+          // Children (Events)
           if (hasEvents)
             AnimatedCrossFade(
               firstChild: const SizedBox.shrink(),
               secondChild: Container(
-                width: double.infinity, // Stretch to full width
-                color: Colors.grey[50], // LIGHT GREY BACKGROUND
+                width: double.infinity,
+                color: const Color(0xFFF9FAFB),
                 child: Column(
                   children:
                       g.events.map((e) {
                         return ListTile(
-                          onTap: () => _navigateToSavePage(e.id, e.title,
-                                parentProjectName: g.project.title,
-                              ),
+                          onTap: () => _navigateToSavePage(e.id, e.title),
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 28,
-                            vertical: 6,
-                          ),
+                            horizontal: 24,
+                            vertical: 2,
+                          ), // Reduced vertical padding
+                          visualDensity: VisualDensity.compact,
                           leading: Container(
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.grey.shade200),
                               image:
                                   e.coverPath != null
                                       ? DecorationImage(
@@ -552,6 +600,7 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
                                 e.coverPath == null
                                     ? const Icon(
                                       Icons.event,
+                                      size: 20,
                                       color: Colors.grey,
                                     )
                                     : null,
@@ -559,8 +608,10 @@ class _ShareToMoodboardPageState extends State<ShareToMoodboardPage> {
                           title: Text(
                             e.title,
                             style: const TextStyle(
+                              fontFamily: 'GeneralSans',
                               fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500, // Matched
+                              color: Color(0xFF27272A),
                             ),
                           ),
                         );
