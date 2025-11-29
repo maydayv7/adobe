@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import '../../data/models/project_model.dart'; // Adjust path as needed
-import '../../data/repos/project_repo.dart'; // Adjust path as needed
-import '../styles/variables.dart'; // Adjust path as needed
+import 'package:adobe/data/models/project_model.dart';
+import 'package:adobe/data/repos/project_repo.dart';
+import '../styles/variables.dart';
 
 class TopBar extends StatefulWidget implements PreferredSizeWidget {
   final int currentProjectId;
   final VoidCallback? onBack;
   final Function(ProjectModel)? onProjectChanged;
   final VoidCallback? onSettingsPressed;
-  final String? titleOverride; // New: For Tag Page title
+  final String? titleOverride;
 
   const TopBar({
     super.key,
@@ -22,9 +22,8 @@ class TopBar extends StatefulWidget implements PreferredSizeWidget {
   @override
   State<TopBar> createState() => _TopBarState();
 
-  // FIX: Reduced from 80 to 56 (Standard Toolbar Height)
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight); 
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
 class _TopBarState extends State<TopBar> {
@@ -51,8 +50,12 @@ class _TopBarState extends State<TopBar> {
 
   Future<void> _loadData() async {
     try {
-      final current = await _projectRepo.getProjectById(widget.currentProjectId);
-      if (current == null) return;
+      final current =
+          await _projectRepo.getProjectById(widget.currentProjectId);
+      if (current == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
 
       ProjectModel? root;
       List<ProjectModel> events = [];
@@ -78,17 +81,19 @@ class _TopBarState extends State<TopBar> {
       }
     } catch (e) {
       debugPrint("TopBar Error: $e");
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final textScaler = MediaQuery.of(context).textScaler;
     return Container(
       color: Variables.background,
       child: SafeArea(
         bottom: false,
         child: SizedBox(
-          height: kToolbarHeight, // FIX: Use standard height
+          height: kToolbarHeight,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -110,7 +115,7 @@ class _TopBarState extends State<TopBar> {
                       ? Text(
                           widget.titleOverride!,
                           style: const TextStyle(
-                            fontSize: 20, // Slightly smaller for tags
+                            fontSize: 20,
                             fontWeight: FontWeight.w600,
                             color: Variables.textPrimary,
                           ),
@@ -123,7 +128,7 @@ class _TopBarState extends State<TopBar> {
                                   child: Text(
                                     _rootProject!.title,
                                     style: const TextStyle(
-                                      fontSize: 22, // Adjusted font size
+                                      fontSize: 22,
                                       fontWeight: FontWeight.w600,
                                       color: Variables.textPrimary,
                                     ),
@@ -131,69 +136,79 @@ class _TopBarState extends State<TopBar> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                PopupMenuButton<ProjectModel>(
-                                  padding: EdgeInsets.zero,
-                                  onSelected: (project) {
-                                    widget.onProjectChanged?.call(project);
-                                  },
-                                  color: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  offset: const Offset(0, 40),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Variables.surfaceSubtle,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          _currentProject!.id == _rootProject!.id
-                                              ? "Main"
-                                              : _currentProject!.title,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                            color: Variables.textPrimary,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        const Icon(
-                                          Icons.keyboard_arrow_down_rounded,
-                                          color: Variables.textPrimary,
-                                          size: 18,
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                                  itemBuilder: (context) {
-                                    return _contextList.map((ProjectModel project) {
-                                      final isRoot = project.id == _rootProject!.id;
-                                      final isSelected = project.id == _currentProject!.id;
-                                      return PopupMenuItem<ProjectModel>(
-                                        value: project,
-                                        child: Text(
-                                          isRoot ? "Main Project" : project.title,
-                                          style: Variables.bodyStyle.copyWith(
-                                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                            color: isSelected ? Variables.textPrimary : Variables.textSecondary,
-                                          ),
-                                        ),
-                                      );
-                                    }).toList();
-                                  },
-                                ),
                               ],
                             )
                           : const SizedBox(),
                 ),
+                if  (!_isLoading && _currentProject != null && _rootProject != null)
+                  PopupMenuButton<ProjectModel>(
+                    padding: EdgeInsets.zero,
+                    onSelected: (project) =>
+                        widget.onProjectChanged?.call(project),
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    offset: const Offset(0, 38),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Variables.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _currentProject!.id == _rootProject!.id
+                                ? "Main"
+                                : _currentProject!.title,
+                            style: Variables.bodyStyle.copyWith(
+                              fontSize: 15 * textScaler.scale(1.1),
+                              fontWeight: FontWeight.w500,
+                              color: Variables.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: Variables.textPrimary,
+                          ),
+                        ],
+                      ),
+                    ),
+                    itemBuilder: (context) {
+                      return _contextList.map((project) {
+                        final isSelected =
+                            project.id == _currentProject!.id;
+                        final isRoot = project.id == _rootProject!.id;
+                        return PopupMenuItem<ProjectModel>(
+                          value: project,
+                          child: Text(
+                            isRoot ? "Main Project" : project.title,
+                            style: Variables.bodyStyle.copyWith(
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: isSelected
+                                  ? Variables.textPrimary
+                                  : Variables.textSecondary,
+                            ),
+                          ),
+                        );
+                      }).toList();
+                    },
+                  ),
+                const SizedBox(width: 12),
 
                 // 3. Settings Icon
                 IconButton(
-                  icon: const Icon(Icons.settings_outlined, color: Variables.textPrimary),
+                  icon: const Icon(Icons.settings_outlined,
+                      color: Variables.textPrimary),
                   onPressed: widget.onSettingsPressed,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),

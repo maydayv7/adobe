@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:adobe/services/analyze/image_analyzer.dart';
+import '../styles/variables.dart';
 
 class ImageAnalysisPage extends StatefulWidget {
   const ImageAnalysisPage({super.key});
@@ -148,10 +149,10 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
             Center(
               child: Container(
                 width: double.infinity,
-                height: 300,
+                height: 250,
                 decoration: BoxDecoration(
                   color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.05),
@@ -161,7 +162,7 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
                   ],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(16),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -171,11 +172,11 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
                         Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.add_photo_alternate_outlined,
+                            Icon(Icons.bug_report_outlined,
                                 size: 48, color: Colors.grey[400]),
                             const SizedBox(height: 12),
                             Text(
-                              "Select an image to analyze",
+                              "Select image to test full suite",
                               style: TextStyle(
                                 fontFamily: 'GeneralSans',
                                 color: Colors.grey[500],
@@ -196,6 +197,8 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
               ),
             ),
             const SizedBox(height: 24),
+
+            // Error Message
             if (_errorMessage != null)
               Container(
                 width: double.infinity,
@@ -210,31 +213,19 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
                   style: const TextStyle(color: Colors.red, fontFamily: 'GeneralSans'),
                 ),
               ),
+
+            // Raw JSON Result
             if (_analysisResult != null) ...[
               const Text(
                 "Results",
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'GeneralSans',
                 ),
               ),
-              
-              const SizedBox(height: 16),
-              _buildFormattedResults(_analysisResult!),
-              const SizedBox(height: 32),
-              ExpansionTile(
-                title: const Text(
-                  "View Raw JSON",
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'GeneralSans',
-                    color: Colors.grey,
-                  ),
-                ),
-                children: [_buildJsonViewer(_analysisResult!)],
-              ),
+              const SizedBox(height: 12),
+              _buildJsonViewer(_analysisResult!),
             ],
             const SizedBox(height: 80),
           ],
@@ -244,101 +235,11 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
         onPressed: _showSourceSelector,
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
-        icon: const Icon(Icons.camera_alt),
+        icon: const Icon(Icons.add_photo_alternate),
         label: Text(
-          _selectedImage == null ? "Pick Image" : "Change Image",
+          _selectedImage == null ? "Select Image" : "Change Image",
           style: const TextStyle(fontFamily: 'GeneralSans'),
         ),
-      ),
-    );
-  }
-
-  Widget _buildFormattedResults(Map<String, dynamic> root) {
-    final data = root['data'];
-    if (data == null || data['results'] == null) {
-      return const Text("No detailed results found.");
-    }
-    final results = data['results'] as Map<String, dynamic>;
-
-    return Column(
-      children: [
-        _buildList("Style", results['Style']),
-        _buildList("Era", results['Era']),
-        _buildList("Emotions", results['Emotions']),
-        _buildList("Lighting", results['Lighting']),
-        _buildList("Layout Composition", results['Layout']),
-        _buildList("Color Palette", results['Colour Palette']),
-        _buildList("Texture", results['Texture']),
-        _buildList("Font", results['Font']),
-      ],
-    );
-  }
-
-  Widget _buildList(String title, dynamic categoryData) {
-    if (categoryData == null || categoryData['scores'] == null) {
-      return const SizedBox.shrink();
-    }
-
-    final scoresMap = categoryData['scores'] as Map<String, dynamic>;
-    
-    final sortedEntries = scoresMap.entries.toList()
-      ..sort((a, b) => (b.value as num).compareTo(a.value as num));
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-              fontFamily: 'GeneralSans',
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Divider(height: 1),
-          const SizedBox(height: 8),
-          ...sortedEntries.map((e) {
-            final val = e.value as num;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      e.key,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black87,
-                        fontFamily: 'GeneralSans',
-                      ),
-                    ),
-                  ),
-                  Text(
-                    val.toStringAsFixed(4), // High precision for debugging
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontFamily: Platform.isIOS ? 'Courier' : 'monospace',
-                      color: Colors.grey[700],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
       ),
     );
   }
@@ -351,16 +252,16 @@ class _ImageAnalysisPageState extends State<ImageAnalysisPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: Variables.borderSubtle,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(color: Colors.grey[800]!),
       ),
       child: SelectableText(
         prettyJson,
         style: TextStyle(
           fontFamily: Platform.isIOS ? 'Courier' : 'monospace',
-          fontSize: 11,
-          color: Colors.grey[800],
+          fontSize: 12,
+          color: Variables.textPrimary,
           height: 1.3,
         ),
       ),

@@ -1,8 +1,6 @@
 import 'dart:io';
-import 'dart:ui' as ui; 
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-
-//services,models
 import '../../services/image_service.dart';
 import '../../services/note_service.dart';
 import '../../data/models/note_model.dart';
@@ -87,13 +85,6 @@ class _ImageDetailsPageState extends State<ImageDetailsPage> {
   }
 
   // --- ACTIONS ---
-
-  Future<void> _removeTag(String tag) async {
-    setState(() {
-      _currentTags.remove(tag);
-    });
-    await _imageService.updateTags(widget.imageId, _currentTags);
-  }
 
   void _activateDrawMode() {
     setState(() {
@@ -692,66 +683,40 @@ class _ImageDetailsPageState extends State<ImageDetailsPage> {
                                                   runSpacing: 8,
                                                   children:
                                                       _currentTags.map((tag) {
-                                                        // Style as "Selected" (Purple with X)
-                                                        return GestureDetector(
-                                                          onTap:
-                                                              () => _removeTag(
-                                                                tag,
+                                                        return Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 12,
+                                                                vertical: 6,
                                                               ),
-                                                          child: Container(
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  horizontal:
-                                                                      12,
-                                                                  vertical: 6,
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(
+                                                              0xFFEEF0FF,
+                                                            ),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  20,
                                                                 ),
-                                                            decoration: BoxDecoration(
+                                                            border: Border.all(
                                                               color:
                                                                   const Color(
-                                                                    0xFFEEF0FF,
+                                                                    0xFF7C4DFF,
                                                                   ),
-                                                              borderRadius:
-                                                                  BorderRadius.circular(
-                                                                    20,
-                                                                  ),
-                                                              border: Border.all(
-                                                                color:
-                                                                    const Color(
-                                                                      0xFF7C4DFF,
-                                                                    ),
-                                                                width: 1,
-                                                              ),
+                                                              width: 1,
                                                             ),
-                                                            child: Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .min,
-                                                              children: [
-                                                                Text(
-                                                                  tag,
-                                                                  style: const TextStyle(
-                                                                    fontSize:
-                                                                        13,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
-                                                                    color: Color(
-                                                                      0xFF7C4DFF,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                const SizedBox(
-                                                                  width: 4,
-                                                                ),
-                                                                const Icon(
-                                                                  Icons.close,
-                                                                  size: 14,
+                                                          ),
+                                                          child: Text(
+                                                            tag,
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 13,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w500,
                                                                   color: Color(
                                                                     0xFF7C4DFF,
                                                                   ),
                                                                 ),
-                                                              ],
-                                                            ),
                                                           ),
                                                         );
                                                       }).toList(),

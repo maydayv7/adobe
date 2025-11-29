@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -11,9 +12,60 @@ class ImageService {
   final ImageRepo _repo = ImageRepo();
   final Uuid _uuid = const Uuid();
 
-  /// Saves a single image and returns its ID.
-  /// This return type (Future<String>) is REQUIRED for ImageSavePage.
-  Future<String> saveImage(File file, int projectId) async {
+  // ANALYSIS QUEUE
+  // Static queue ensures all instances share the same processing line
+  static final List<Future<void> Function()> _analysisQueue = [];
+  static bool _isProcessingQueue = false;
+
+  static void _enqueueAnalysis(
+    String debugLabel,
+    Future<void> Function() task,
+  ) {
+    debugPrint(
+      "[Queue] Enqueueing task: $debugLabel. (Queue size: ${_analysisQueue.length + 1})",
+    );
+    _analysisQueue.add(task);
+
+    if (!_isProcessingQueue) {
+      _processQueue();
+    }
+  }
+
+  static Future<void> _processQueue() async {
+    if (_isProcessingQueue) return;
+    _isProcessingQueue = true;
+
+    debugPrint("[Queue] Queue processor started.");
+
+    while (_analysisQueue.isNotEmpty) {
+      final task = _analysisQueue.removeAt(0);
+
+      try {
+        debugPrint(
+          "[Queue] Starting next task. Remaining in queue: ${_analysisQueue.length}",
+        );
+        await task();
+        debugPrint("[Queue] Task completed");
+      } catch (e) {
+        debugPrint("[Queue] Task failed: $e");
+      }
+
+      // Small delay to let the UI update between heavy jobs
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    debugPrint("[Queue] Queue empty. All background jobs finished.");
+    _isProcessingQueue = false;
+  }
+
+  // --- PUBLIC METHODS ---
+
+  // Saves a single image and returns its ID
+  Future<String> saveImage(
+    File file,
+    int projectId, {
+    List<String> tags = const [],
+  }) async {
     // 1. Prepare Directory
     final dir = await getApplicationDocumentsDirectory();
     final folder = Directory("${dir.path}/images");
@@ -40,41 +92,63 @@ class ImageService {
       createdAt: DateTime.now(),
       tags: [],
     );
-
     await _repo.addImage(image);
 
-    // 4. Run Analysis in Background
-    _analyzeInBackground(id, newPath);
+    // 4. Update Tags & Trigger Analysis
+    await updateTags(id, tags);
 
-    // 5. RETURN THE ID (Critical fix)
     return id;
   }
 
-  /// Bulk save method (optional, but good helper)
-  Future<List<String>> saveImages(List<File> files, int projectId) async {
+  // Bulk save method
+  Future<List<String>> saveImages(
+    List<File> files,
+    int projectId, {
+    List<String> tags = const [],
+  }) async {
     List<String> ids = [];
     for (var file in files) {
-      // Reuse the single save logic to avoid code duplication
-      String id = await saveImage(file, projectId);
+      String id = await saveImage(file, projectId, tags: tags);
       ids.add(id);
     }
     return ids;
   }
 
-  Future<void> _analyzeInBackground(String imageId, String filePath) async {
-    try {
-      debugPrint("[Background] Starting analysis for $imageId...");
-      final result = await ImageAnalyzerService.analyzeFullSuite(filePath);
-      if (result != null) {
-        // Convert Map to JSON String
-        final String jsonString = jsonEncode(result);
+  // Updates tags and triggers relevant analysis
+  Future<void> updateTags(String imageId, List<String> newTags) async {
+    // 1. Update Tags in Database
+    await _repo.updateTags(imageId, newTags);
 
-        // Update DB without user intervention
+    // 2. Fetch Image path
+    final image = await _repo.getById(imageId);
+    if (image != null) {
+      // 3. Enqueue Analysis
+      _enqueueAnalysis("Analyze $imageId", () async {
+        await _analyzeInBackground(imageId, image.filePath, tags: newTags);
+      });
+    }
+  }
+
+  Future<void> _analyzeInBackground(
+    String imageId,
+    String filePath, {
+    List<String> tags = const [],
+  }) async {
+    try {
+      Map<String, dynamic>? result;
+      if (tags.isEmpty) {
+        result = await ImageAnalyzerService.analyzeFullSuite(filePath);
+      } else {
+        result = await ImageAnalyzerService.analyzeSelected(filePath, tags);
+      }
+
+      if (result != null) {
+        final String jsonString = jsonEncode(result);
         await _repo.updateAnalysis(imageId, jsonString);
-        debugPrint("[Background] Analysis saved for $imageId");
       }
     } catch (e) {
-      debugPrint("[Background] Analysis failed: $e");
+      // Re-throw so the queue knows it failed
+      throw Exception("Analysis failed for $imageId: $e");
     }
   }
 
@@ -89,11 +163,6 @@ class ImageService {
 
   Future<List<String>> getTags(String imageId) async {
     return await _repo.getTagsForImage(imageId);
-  }
-
-  
-  Future<void> updateTags(String imageId, List<String> newTags) async {
-    await _repo.updateTags(imageId, newTags);
   }
 
   Future<void> deleteImage(String id) async {

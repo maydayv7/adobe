@@ -336,15 +336,14 @@ class _ImageSavePageState extends State<ImageSavePage> {
         if (!file.existsSync()) continue;
 
         // 1. Save Image
-        final imageId = await _imageService.saveImage(file, widget.projectId);
-
-        // 2. Save Tags for this specific image
         final tags = _tagsPerImage[i] ?? {};
-        if (tags.isNotEmpty) {
-          await _imageService.updateTags(imageId, tags.toList());
-        }
+        final imageId = await _imageService.saveImage(
+          file,
+          widget.projectId,
+          tags: tags.toList(),
+        );
 
-        // 3. Save Notes for this specific image
+        // 2. Save Notes for this specific image
         final notes = _notesPerImage[i] ?? [];
         for (var note in notes) {
           await _noteService.addNote(
