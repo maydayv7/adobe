@@ -1,36 +1,38 @@
+// lib/services/analyze/texture.dart
+
 import 'dart:io';
 import 'dart:convert';
+import 'package:adobe/utils/image_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:onnxruntime/onnxruntime.dart';
-import 'package:adobe/utils/image_utils.dart';
-import 'package:adobe/utils/clip_image_processor.dart';
 
 class TextureAnalyzerService {
   OrtSession? _session;
   Map<String, List<double>>? _centroids;
 
+  // DINOv2 Small (S14) Config
   static const int INPUT_SIZE = 224;
   static const int EMBED_DIM = 384; 
-  static const int MAX_COUNT = 5;
+  
+  // Logic params matching your Python script
   static const double RELATIVE_THRESH = 0.85;
-  static const double ABSOLUTE_FLOOR = 0.15;
+  static const double ABSOLUTE_FLOOR = 0.05; // Updated to match Python
 
   Future<void> initialize({required String modelPath, required String jsonPath}) async {
     if (_session != null) return;
 
     try {
-      debugPrint("Initializing Texture Service...");
+      debugPrint("Initializing Texture Service (DINOv2 S14)...");
       
-      // Initialize ORT Environment (FFI)
       OrtEnv.instance.init();
 
-      // 1. Load Model from passed PATH
+      // 1. Load Model
       final sessionOptions = OrtSessionOptions();
       _session = OrtSession.fromFile(File(modelPath), sessionOptions);
       sessionOptions.release();
 
-      // 2. Load JSON from passed PATH
+      // 2. Load Centroids
       final jsonStr = await File(jsonPath).readAsString();
       final Map<String, dynamic> jsonMap = json.decode(jsonStr);
       _centroids = {};
@@ -41,12 +43,10 @@ class TextureAnalyzerService {
     }
   }
 
-  // Changed return type to Map to match other services
   Future<Map<String, dynamic>> analyze(String path, {
     String? modelPath, 
     String? jsonPath
   }) async {
-    // Safety check
     if (modelPath == null || jsonPath == null) return {'success': false, 'scores': {}, 'error': 'Paths missing'};
     await initialize(modelPath: modelPath, jsonPath: jsonPath);
     if (_session == null || _centroids == null) return {'success': false, 'scores': {}, 'error': 'Init failed'};
@@ -56,81 +56,80 @@ class TextureAnalyzerService {
     List<OrtValue?>? outputs;
 
     try {
-      // 1. Preprocess
+      // 1. Preprocess (Standard ImageNet Normalization)
       final bytes = await File(path).readAsBytes();
       final image = img.decodeImage(bytes);
-      if (image == null) return {'success': false, 'scores': {}, 'error': 'Image decode failed'};
+      if (image == null) return {'success': false, 'scores': {}, 'error': 'Decode failed'};
 
       final resized = img.copyResize(image, width: INPUT_SIZE, height: INPUT_SIZE);
-
-      // 2. Normalize (ImageNet stats)
       final List<double> inputFloats = List.filled(1 * 3 * INPUT_SIZE * INPUT_SIZE, 0.0);
+      
+      // ImageNet Stats
+      const mean = [0.485, 0.456, 0.406];
+      const std = [0.229, 0.224, 0.225];
+
       int pixelIndex = 0;
       for (int y = 0; y < INPUT_SIZE; y++) {
         for (int x = 0; x < INPUT_SIZE; x++) {
           final pixel = resized.getPixel(x, y);
-          inputFloats[pixelIndex] = ((pixel.r / 255.0) - 0.485) / 0.229;
-          inputFloats[pixelIndex + (INPUT_SIZE * INPUT_SIZE)] = ((pixel.g / 255.0) - 0.456) / 0.224;
-          inputFloats[pixelIndex + (2 * INPUT_SIZE * INPUT_SIZE)] = ((pixel.b / 255.0) - 0.406) / 0.225;
+          // R
+          inputFloats[pixelIndex] = ((pixel.r / 255.0) - mean[0]) / std[0];
+          // G
+          inputFloats[pixelIndex + (INPUT_SIZE * INPUT_SIZE)] = ((pixel.g / 255.0) - mean[1]) / std[1];
+          // B
+          inputFloats[pixelIndex + (2 * INPUT_SIZE * INPUT_SIZE)] = ((pixel.b / 255.0) - mean[2]) / std[2];
           pixelIndex++;
         }
       }
-      
+
       final float32List = Float32List.fromList(inputFloats); 
 
-      // 3. Inference
-      // Create Tensor using FFI method with Float32List
-      inputOrt = OrtValueTensor.createTensorWithDataList(
-          float32List, [1, 3, INPUT_SIZE, INPUT_SIZE]);
-
+      // 2. Inference
+      inputOrt = OrtValueTensor.createTensorWithDataList(float32List, [1, 3, INPUT_SIZE, INPUT_SIZE]);
       runOptions = OrtRunOptions();
       
       // Run Inference
-      // 'input' is the standard name, check your model using Netron if it fails
-      outputs = _session!.run(runOptions, {"input": inputOrt});
+      // Note: 'input' is standard for tf2onnx/torch.onnx exports
+      outputs = _session!.run(runOptions, {"input": inputOrt}); 
       
-      if (outputs.isEmpty) throw Exception("Output tensor missing");
+      if (outputs.isEmpty) throw Exception("No output");
 
-      // Get Output
-      // FFI returns a List<OrtValue>, usually index 0 is what we want
-      final dynamic outputRaw = outputs[0]?.value; 
-
-      // Flatten output
-      final List<double> rawOutput = [];
+      // 3. Extract Feature Vector
+      // The Python export script baked "Mean Pooling" into the model.
+      // So we get a single vector [1, 384] directly. No need to loop patches!
+      final rawOutput = outputs[0]?.value as List; 
+      final List<double> embedding = [];
       void flatten(dynamic data) {
-        if (data is num) {
-          rawOutput.add(data.toDouble());
-        } else if (data is List) {
-          for (var item in data) {
-            flatten(item);
-          }
-        }
+        if (data is num) embedding.add(data.toDouble());
+        else if (data is List) for (var item in data) flatten(item);
       }
-      flatten(outputRaw);
+      flatten(rawOutput);
 
-      // 4. Scoring (Cosine Similarity)
+      // 4. Normalize Embedding (L2 Norm)
+      // DINOv2 cosine similarity requires normalized vectors.
+      final normalizedEmbedding = l2Normalize(embedding);
+
+      // 5. Scoring (Dot Product = Cosine Similarity)
       Map<String, double> rawScores = {};
       _centroids!.forEach((name, centroid) {
-        double sumSim = 0.0;
-        int patches = 256; 
-        for (int i = 0; i < patches; i++) {
-           int start = i * EMBED_DIM;
-           if (start + EMBED_DIM <= rawOutput.length) {
-              sumSim += cosineSim(rawOutput.sublist(start, start + EMBED_DIM), centroid);
-           }
-        }
-        rawScores[name] = sumSim / patches;
+        double dot = dotProduct(normalizedEmbedding, centroid);
+        rawScores[name] = dot;
       });
 
-      // 5. Filter & Sort
+      // 6. Filter & Sort
       var sorted = rawScores.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
       Map<String, dynamic> finalResults = {};
 
-      for(var entry in sorted) { //.take(3)
-        finalResults[entry.key] = entry.value;
+      if (sorted.isNotEmpty) {
+        double topScore = sorted.first.value;
+        for (var entry in sorted) {
+          if (entry.value < ABSOLUTE_FLOOR) continue;
+          if (entry.value < (topScore * RELATIVE_THRESH)) break;
+          
+          finalResults[entry.key] = entry.value;
+        }
       }
-
-      // Return Map consistent with other services
+      
       return {
         'success': true,
         'scores': finalResults,
@@ -141,13 +140,12 @@ class TextureAnalyzerService {
       debugPrint("Texture Analysis Failed: $e");
       return {'success': false, 'scores': {}, 'error': e.toString()};
     } finally {
-      // FFI Requires manual release of C++ resources
       inputOrt?.release();
       runOptions?.release();
       outputs?.forEach((element) => element?.release());
     }
   }
-  
+
   void dispose() {
     _session?.release();
   }
